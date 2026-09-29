@@ -10,10 +10,13 @@
 import {
   codePoints,
   copyRange,
+  copyRect,
   cos as stdCos,
   fill,
   fillRange,
+  fillRect,
   f32,
+  i16,
   i32,
   idiv,
   len,
@@ -22,6 +25,7 @@ import {
   sin as stdSin,
   u8,
   type f32 as F32,
+  type i16 as I16,
   type i32 as I32,
   type u8 as U8,
 } from "@pocketjs/framework/solid/std";
@@ -48,6 +52,16 @@ let palIdentity: boolean[] = [true, true, true, true];
 let ditherMask: I32[] = [ALL_PIXELS, ALL_PIXELS, ALL_PIXELS, ALL_PIXELS];
 /** Image banks copied into RAM by their first write; empty while unchanged. */
 let banks: U8[][] = [[], [], []];
+/**
+ * The color of each 8 x 8 cell of the image banks (32 x 32 cells a bank) when
+ * all its pixels share it, MIXED when they do not, UNKNOWN until measured.
+ * Tilemap drawing skips cells of its transparent color and fills the others.
+ */
+const MIXED: I32 = 256;
+const UNKNOWN: I32 = 257;
+let cellColors: I16[] = fill(3 * 1024, i16(UNKNOWN));
+/** Banks written since their cell colors were last reset. */
+let cellsStale: boolean[] = [false, false, false];
 
 export function resetSurfaces(): void {
   for (let s = 0; s < 4; s++) {
@@ -122,10 +136,35 @@ function mapped(s: I32, col: I32): I32 {
 
 /** Copies a bank into RAM before its first write. */
 function writable(s: I32): void {
-  if (s < SCREEN && len(banks[s]) === 0) {
+  if (s >= SCREEN) return;
+  cellsStale[s] = true;
+  if (len(banks[s]) === 0) {
     banks[s] = fill(BANK_BYTES, u8(0));
     copyRange(banks[s], 0, IMAGES, s * BANK_BYTES, BANK_BYTES);
   }
+}
+
+/** Forgets the cell colors of bank img if it was written since they were measured. */
+function refreshCells(img: I32): void {
+  if (!cellsStale[img]) return;
+  fillRange(cellColors, img * 1024, img * 1024 + 1024, i16(UNKNOWN));
+  cellsStale[img] = false;
+}
+
+/** Measures and records the shared color of cell (cx, cy) of bank img, or MIXED. */
+function measureCell(img: I32, cx: I32, cy: I32): I32 {
+  const x = cx * 8,
+    y = cy * 8,
+    first = read(img, x, y);
+  let color = first;
+  for (let j = 0; j < 8 && color === first; j++)
+    for (let i = 0; i < 8; i++)
+      if (read(img, x + i, y + j) !== first) {
+        color = MIXED;
+        break;
+      }
+  cellColors[img * 1024 + cy * 32 + cx] = i16(color);
+  return color;
 }
 
 /** Reads a surface pixel without camera or clip. */
@@ -547,22 +586,34 @@ function copyArea(
   copySrcY = srcY + (flipY ? bottomCut : topCut);
 }
 
-/** Copies n pixels from cartridge image data to the screen, skipping `key`. */
+/**
+ * Copies a w x h block of image `img` from si to the screen at di, skipping
+ * `key` (-1 skips none). The source advances by `step` (1, or -1 to read right
+ * to left) along a row and by `stride` between rows. A bank copied to RAM is
+ * read there, others from cartridge data.
+ */
 /** @iwram */
-function romRowKeyed(di: I32, si: I32, n: I32, key: I32): void {
-  for (let i = 0; i < n; i++) {
-    const c = IMAGES[si + i];
-    if (i32(c) !== key) screen[di + i] = c;
+function blockToScreen(img: I32, si: I32, di: I32, w: I32, h: I32, step: I32, stride: I32, key: I32): void {
+  const inRam = len(banks[img]) > 0;
+  // Row by row: blits have long rows, which copyRange loops over more tightly than copyRect.
+  for (let j = 0; j < h; j++) {
+    const from = si + j * stride,
+      to = di + j * width;
+    if (step > 0 && inRam && key < 0) copyRange(screen, to, banks[img], from, w);
+    else if (step > 0 && inRam) copyRange(screen, to, banks[img], from, w, u8(key));
+    else if (step > 0 && key < 0) copyRange(screen, to, IMAGES, img * BANK_BYTES + from, w);
+    else if (step > 0) copyRange(screen, to, IMAGES, img * BANK_BYTES + from, w, u8(key));
+    else
+      for (let i = 0; i < w; i++) {
+        const c = inRam ? banks[img][from - i] : IMAGES[img * BANK_BYTES + from - i];
+        if (i32(c) !== key) screen[to + i] = c;
+      }
   }
 }
 
-/** As romRowKeyed, reading the source right to left from si. */
-/** @iwram */
-function romRowKeyedReversed(di: I32, si: I32, n: I32, key: I32): void {
-  for (let i = 0; i < n; i++) {
-    const c = IMAGES[si - i];
-    if (i32(c) !== key) screen[di + i] = c;
-  }
+/** A color key the block copies can skip: colors are bytes, so larger keys match nothing. */
+function blockKey(key: I32): I32 {
+  return key > 255 ? -1 : key;
 }
 
 /** A screen row from any source with key, flip and draw palette. */
@@ -586,21 +637,24 @@ export function blt(s: I32, x: I32, y: I32, img: I32, u: I32, v: I32, w: I32, h:
   writable(s);
   copyArea(s, x - camX[s], y - camY[s], u, v, surfaceWidth(img) - 1, surfaceHeight(img) - 1, w, h);
   if (copyW === 0 || copyH === 0) return;
-  const direct =
-    s === SCREEN && img < SCREEN && ditherMask[s] === ALL_PIXELS && palIdentity[s] && len(banks[img]) === 0;
-  for (let yi = 0; yi < copyH; yi++) {
-    const sy = copySrcY + copySignY * yi + copyOffY,
-      dy = copyDstY + yi;
-    if (direct) {
-      const di = dy * width + copyDstX,
-        si = img * BANK_BYTES + sy * IMAGE_SIZE + copySrcX;
-      if (copySignX > 0 && key < 0) copyRange(screen, di, IMAGES, si, copyW);
-      else if (copySignX > 0) romRowKeyed(di, si, copyW, key);
-      else romRowKeyedReversed(di, si + copyOffX, copyW, key);
-    } else {
-      rowGeneric(s, img, copyDstX, dy, copySrcX + copyOffX, sy, copySignX, copyW, key);
-    }
+  if (s === SCREEN && img < SCREEN && ditherMask[s] === ALL_PIXELS && palIdentity[s]) {
+    const si = (copySrcY + copyOffY) * IMAGE_SIZE + copySrcX + copyOffX,
+      di = copyDstY * width + copyDstX;
+    blockToScreen(img, si, di, copyW, copyH, copySignX, copySignY * IMAGE_SIZE, blockKey(key));
+    return;
   }
+  for (let yi = 0; yi < copyH; yi++)
+    rowGeneric(
+      s,
+      img,
+      copyDstX,
+      copyDstY + yi,
+      copySrcX + copyOffX,
+      copySrcY + copySignY * yi + copyOffY,
+      copySignX,
+      copyW,
+      key,
+    );
 }
 
 /** A blit whose source is its destination reads a copy of the source region first. */
@@ -727,6 +781,7 @@ function slot(key: I32): I32 {
 }
 
 /** The tile at (x, y) of tilemap m, in tiles; outside the map it is tile(0, 0). */
+/** @iwram */
 export function tget(m: I32, x: I32, y: I32): I32 {
   if (x < 0 || y < 0 || x >= TILEMAP_SIZE || y >= TILEMAP_SIZE) return 0;
   if (overlayCount > 0) {
@@ -770,40 +825,67 @@ export function bltm(s: I32, x: I32, y: I32, m: I32, u: I32, v: I32, w: I32, h: 
   copyArea(s, x - camX[s], y - camY[s], u, v, TILEMAP_SIZE * 8 - 1, TILEMAP_SIZE * 8 - 1, w, h);
   if (copyW === 0 || copyH === 0) return;
   const img = tilemapSources[m];
-  const direct =
+  if (
     s === SCREEN &&
     img < SCREEN &&
     copySignX > 0 &&
+    copySignY > 0 &&
     ditherMask[s] === ALL_PIXELS &&
-    palIdentity[s] &&
-    len(banks[img]) === 0;
+    palIdentity[s]
+  ) {
+    refreshCells(img);
+    tilesToScreen(m, img, blockKey(key));
+    return;
+  }
   for (let yi = 0; yi < copyH; yi++) {
-    const ty = copySrcY + copySignY * yi + copyOffY,
-      dy = copyDstY + yi;
-    let xi = 0;
-    while (xi < copyW) {
+    const ty = copySrcY + copySignY * yi + copyOffY;
+    for (let xi = 0; xi < copyW; xi++) {
       const tx = copySrcX + copySignX * xi + copyOffX;
-      const px = tx & 7;
       const value = tget(m, tx >> 3, ty >> 3);
-      const ix = (value & 255) * 8 + px,
+      const ix = (value & 255) * 8 + (tx & 7),
         iy = (value >> 8) * 8 + (ty & 7);
-      if (direct) {
-        const chunk = 8 - px < copyW - xi ? 8 - px : copyW - xi;
-        if (ix < IMAGE_SIZE && iy < IMAGE_SIZE) {
-          const valid = chunk < IMAGE_SIZE - ix ? chunk : IMAGE_SIZE - ix;
-          const di = dy * width + copyDstX + xi,
-            si = img * BANK_BYTES + iy * IMAGE_SIZE + ix;
-          if (key < 0) copyRange(screen, di, IMAGES, si, valid);
-          else romRowKeyed(di, si, valid, key);
-        }
-        xi += chunk;
-      } else {
-        if (ix < IMAGE_SIZE && iy < IMAGE_SIZE) {
-          const c = read(img, ix, iy);
-          if (c !== key) put(s, copyDstX + xi, dy, mapped(s, c));
-        }
-        xi++;
+      if (ix < IMAGE_SIZE && iy < IMAGE_SIZE) {
+        const c = read(img, ix, iy);
+        if (c !== key) put(s, copyDstX + xi, copyDstY + yi, mapped(s, c));
       }
+    }
+  }
+}
+
+/**
+ * The copy window of an unflipped bltm to the screen, one block per tile.
+ * Runs from IWRAM, so helpers it calls are written out or tagged too.
+ */
+/** @iwram */
+function tilesToScreen(m: I32, img: I32, key: I32): void {
+  const inRam = len(banks[img]) > 0;
+  const right = copySrcX + copyW - 1,
+    bottom = copySrcY + copyH - 1;
+  for (let ty = copySrcY >> 3; ty <= bottom >> 3; ty++) {
+    const top = copySrcY > ty * 8 ? copySrcY - ty * 8 : 0,
+      rows = (bottom - ty * 8 < 7 ? bottom - ty * 8 : 7) - top + 1;
+    const rowStart = (copyDstY + ty * 8 + top - copySrcY) * width + copyDstX - copySrcX;
+    for (let tx = copySrcX >> 3; tx <= right >> 3; tx++) {
+      // copyArea keeps (tx, ty) inside the map, so only overlay tiles need tget.
+      const at = m * TILEMAP_BYTES + (ty * TILEMAP_SIZE + tx) * 2;
+      const value = overlayCount > 0 ? tget(m, tx, ty) : i32(TILEMAPS[at]) | (i32(TILEMAPS[at + 1]) << 8);
+      // Tiles name 8 x 8 cells of a 256 x 256 image; others draw nothing.
+      const cx = value & 255,
+        cy = value >> 8;
+      if (cx >= 32 || cy >= 32) continue;
+      let color = i32(cellColors[img * 1024 + cy * 32 + cx]);
+      if (color === UNKNOWN) color = measureCell(img, cx, cy);
+      if (color === key) continue;
+      const left = copySrcX > tx * 8 ? copySrcX - tx * 8 : 0,
+        cols = (right - tx * 8 < 7 ? right - tx * 8 : 7) - left + 1;
+      const di = rowStart + tx * 8 + left,
+        si = (cy * 8 + top) * IMAGE_SIZE + cx * 8 + left;
+      // Copies are written out here rather than in blockToScreen to save a call per tile.
+      if (color !== MIXED) fillRect(screen, di, width, cols, rows, u8(color));
+      else if (inRam && key < 0) copyRect(screen, di, width, banks[img], si, IMAGE_SIZE, cols, rows);
+      else if (inRam) copyRect(screen, di, width, banks[img], si, IMAGE_SIZE, cols, rows, u8(key));
+      else if (key < 0) copyRect(screen, di, width, IMAGES, img * BANK_BYTES + si, IMAGE_SIZE, cols, rows);
+      else copyRect(screen, di, width, IMAGES, img * BANK_BYTES + si, IMAGE_SIZE, cols, rows, u8(key));
     }
   }
 }
