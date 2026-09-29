@@ -112,9 +112,10 @@ impl Game for Pyxel {
 
 #[no_mangle]
 extern "C" fn pyxel_game_main() -> ! {
-    // The model and its small arrays go to IWRAM while they fit; the host
-    // later moves the screen there too if room remains.
-    let mut game = Pyxel(pocket_pyxel_gba::memory::in_iwram(|| alloc::boxed::Box::new(AppModel::default())));
+    // The model and its small arrays go to IWRAM while they fit, leaving room
+    // for the screen, which the host moves there after boot.
+    let model = pocket_pyxel_gba::memory::in_iwram_up_to(512, AppModel::default);
+    let mut game = Pyxel(pocket_pyxel_gba::memory::in_iwram(|| alloc::boxed::Box::new(model)));
     pocket_pyxel_gba::log!("model {} bytes", core::mem::size_of::<AppModel>());
     pocket_pyxel_gba::run(&mut game)
 }

@@ -17,11 +17,12 @@ struct Allocator {
 }
 unsafe impl Sync for Allocator {}
 
-static mut PREFER_IWRAM: bool = false;
+/// Largest block placed in IWRAM; 0 outside `in_iwram`.
+static mut IWRAM_BLOCKS: usize = 0;
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        if PREFER_IWRAM {
+        if layout.size() <= IWRAM_BLOCKS {
             if let Ok(block) = (*self.iwram.get()).allocate_first_fit(layout) {
                 return block.as_ptr();
             }
@@ -49,9 +50,14 @@ fn is_iwram(ptr: *const u8) -> bool {
 
 /// Runs `f` with allocations placed in IWRAM while they fit.
 pub fn in_iwram<T>(f: impl FnOnce() -> T) -> T {
-    unsafe { PREFER_IWRAM = true };
+    in_iwram_up_to(usize::MAX, f)
+}
+
+/// Runs `f` with allocations of at most `size` bytes placed in IWRAM while they fit.
+pub fn in_iwram_up_to<T>(size: usize, f: impl FnOnce() -> T) -> T {
+    unsafe { IWRAM_BLOCKS = size };
     let result = f();
-    unsafe { PREFER_IWRAM = false };
+    unsafe { IWRAM_BLOCKS = 0 };
     result
 }
 
