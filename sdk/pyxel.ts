@@ -606,8 +606,8 @@ export function soundSet(snd: I32, notes: string, tones: string, volumes: string
   audioSetSound(snd, notes, tones, volumes, effects, speed);
 }
 
-/** pyxel.musics[msc].set(seq0, seq1, seq2, seq3). */
-export function musicSet(msc: I32, seq0: I32[], seq1: I32[], seq2: I32[], seq3: I32[]): void {
+/** pyxel.musics[msc].set(seq0, seq1, seq2, seq3); channels left out play nothing. */
+export function musicSet(msc: I32, seq0: I32[], seq1: I32[] = [], seq2: I32[] = [], seq3: I32[] = []): void {
   audioSetMusic(msc, seq0, seq1, seq2, seq3);
 }
 
@@ -631,6 +631,16 @@ export function ceil(v: F32): I32 {
 export function floor(v: F32): I32 {
   const t = i32(v);
   return f32(t) > v ? t - 1 : t;
+}
+
+/** pyxel.clamp for integers: x limited to lower..upper. */
+export function clamp(x: I32, lower: I32, upper: I32): I32 {
+  return x < lower ? lower : x > upper ? upper : x;
+}
+
+/** pyxel.sgn for integers: -1, 0 or 1. */
+export function sgn(x: I32): I32 {
+  return x > 0 ? 1 : x < 0 ? -1 : 0;
 }
 
 /** Python's a // b for integers: floors toward negative infinity. */
