@@ -15,8 +15,6 @@ import {
   imod,
   len,
   atan2 as stdAtan2,
-  cos as stdCos,
-  sin as stdSin,
   sqrt as stdSqrt,
   type f32 as F32,
   type i32 as I32,
@@ -699,14 +697,35 @@ export function sqrt(v: F32): F32 {
   return stdSqrt(v);
 }
 
+/**
+ * sin(2 pi (t + quarters / 4)) for an angle of t turns. t is reduced to the
+ * nearest quarter turn, and the remainder, at most 45 degrees, goes through
+ * the f32 polynomials of FreeBSD's k_sinf and k_cosf: within 2e-7 of the
+ * exact value, all in f32. libm's sinf reduces its argument in f64, which
+ * the GBA emulates at over 10,000 cycles a call.
+ */
+function sinTurns(t: F32, quarters: I32): F32 {
+  const q = floor(t * f32(4) + f32(0.5));
+  const x = (t - f32(q) * f32(0.25)) * f32(6.2831855),
+    z = x * x;
+  const quadrant = (q + quarters) & 3;
+  if (quadrant === 0 || quadrant === 2) {
+    const s =
+      x + x * z * (f32(-0.16666667) + z * (f32(0.008333329) + z * (f32(-0.00019839335) + z * f32(0.0000027183114))));
+    return quadrant === 0 ? s : -s;
+  }
+  const c = f32(1) + z * (f32(-0.5) + z * (f32(0.041666623) + z * (f32(-0.0013886764) + z * f32(0.000024390449))));
+  return quadrant === 1 ? c : -c;
+}
+
 /** Sine of an angle in degrees. */
 export function sin(deg: F32): F32 {
-  return stdSin(deg * f32(0.017453292));
+  return sinTurns(deg * f32(0.0027777778), 0);
 }
 
 /** Cosine of an angle in degrees. */
 export function cos(deg: F32): F32 {
-  return stdCos(deg * f32(0.017453292));
+  return sinTurns(deg * f32(0.0027777778), 1);
 }
 
 /** Angle of (x, y) in degrees. */
