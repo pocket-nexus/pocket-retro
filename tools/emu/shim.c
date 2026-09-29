@@ -10,6 +10,8 @@
 #include <mgba/core/config.h>
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
+#include <mgba/core/timing.h>
+#include <mgba/internal/arm/arm.h>
 
 #include <stdarg.h>
 #include <stdint.h>
@@ -156,4 +158,29 @@ int32_t emu_take_log(char *out, int32_t capacity) {
   int dropped = logDropped;
   logDropped = 0;
   return dropped ? -1 : (int32_t)length;
+}
+
+/*
+ * Samples the address of the executing instruction every `interval` CPU
+ * cycles, `count` times, so that each function's share of samples is its
+ * share of time. Samples taken while the CPU is halted read as 0.
+ */
+void emu_profile(uint32_t *samples, int32_t count, int32_t interval) {
+  struct ARMCore *cpu = core->cpu;
+  int32_t last = mTimingCurrentTime(core->timing);
+  int32_t elapsed = 0;
+  int32_t taken = 0;
+  while (taken < count) {
+    uint32_t pc = cpu->halted ? 0
+                              : cpu->gprs[ARM_PC] -
+                                    (cpu->executionMode == MODE_THUMB ? 4 : 8);
+    core->step(core);
+    int32_t now = mTimingCurrentTime(core->timing);
+    elapsed += now - last;
+    last = now;
+    while (elapsed >= interval && taken < count) {
+      samples[taken++] = pc;
+      elapsed -= interval;
+    }
+  }
 }

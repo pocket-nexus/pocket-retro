@@ -33,6 +33,7 @@ const symbols = {
   emu_audio: { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
   emu_read: { args: [FFIType.u32, FFIType.ptr, FFIType.u32], returns: FFIType.void },
   emu_take_log: { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
+  emu_profile: { args: [FFIType.ptr, FFIType.i32, FFIType.i32], returns: FFIType.void },
 } as const;
 
 type Library = ReturnType<typeof dlopen<typeof symbols>>;
@@ -114,6 +115,14 @@ export class Gba {
 
   read32(address: number): number {
     return new DataView(this.read(address, 4).buffer).getUint32(0, true);
+  }
+
+  /** Addresses of executing instructions, one every `interval` CPU cycles (0 while halted). */
+  profile(count: number, interval: number): Uint32Array {
+    const samples = new Uint32Array(count);
+    this.lib.emu_profile(ptr(samples), count, interval);
+    this.collectLog();
+    return samples;
   }
 
   /** Interleaved stereo samples recorded since recordAudio was set. */
