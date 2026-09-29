@@ -3,8 +3,11 @@
 //! Mode 4 shows a 240 x 160 page of 8-bit palette indices from BG2 through
 //! the 256-entry BG palette, which matches Pyxel's indexed screen. Two pages
 //! alternate: the host copies a frame into the hidden page, then flips pages
-//! during VBlank. A screen smaller than 240 x 160 is centered; pixels outside
-//! it use palette entry 0.
+//! during VBlank. Pixels outside the screen use palette entry 0.
+//!
+//! A screen at most half the display in each direction is scaled up by an
+//! integer factor with BG2's affine matrix; the screen then sits at the top
+//! left of the page and the matrix centers it. Other screens are centered 1:1.
 
 use crate::hw;
 use crate::Screen;
@@ -17,12 +20,34 @@ const HEIGHT: usize = 160;
 const MODE4: u16 = 4;
 const BG2: u16 = 1 << 10;
 const PAGE1: u16 = 1 << 4;
+const BG2PA: usize = 0x0400_0020;
+const BG2PB: usize = 0x0400_0022;
+const BG2PC: usize = 0x0400_0024;
+const BG2PD: usize = 0x0400_0026;
+const BG2X: usize = 0x0400_0028;
+const BG2Y: usize = 0x0400_002c;
+
+/// One axis of an integer upscale by `scale` through a matrix step of
+/// floor(256 / scale) / 256 source pixels per display pixel, starting at
+/// `bias` / 256: every display pixel must land in its own source pixel,
+/// which holds while the rounding error summed over `length` pixels stays
+/// inside one display pixel's share. Returns (step, bias) when exact.
+fn affine_axis(scale: usize, length: usize) -> Option<(i32, i32)> {
+    let step = (256 / scale) as i32;
+    let error = 256 - scale as i32 * step;
+    let bias = (length as i32 - 1) * error;
+    // Source k covers display pixels scale*k .. scale*k + scale - 1.
+    ((scale as i32 - 1) * step + bias < 256).then_some((step, bias))
+}
 
 pub struct Display {
     /// The page not shown, which the next frame is copied into.
     back: usize,
     colors: [u16; 256],
     color_count: usize,
+    /// Screen size the matrix was set up for.
+    layout: (usize, usize),
+    scaled: bool,
 }
 
 impl Display {
@@ -35,6 +60,37 @@ impl Display {
             back: 1,
             colors: [0; 256],
             color_count: 0,
+            layout: (0, 0),
+            scaled: false,
+        }
+    }
+
+    /// Chooses 1:1 centering or the largest exact integer upscale for a screen size.
+    fn set_layout(&mut self, width: usize, height: usize) {
+        self.layout = (width, height);
+        self.scaled = false;
+        let mut matrix = (256, 256, 0, 0);
+        let mut scale = (WIDTH / width.max(1)).min(HEIGHT / height.max(1));
+        while scale >= 2 {
+            if let (Some((dx, bx)), Some((dy, by))) = (affine_axis(scale, width), affine_axis(scale, height)) {
+                // Display offset of the scaled screen, moved into the reference point.
+                let left = ((WIDTH - width * scale) / 2) as i32;
+                let top = ((HEIGHT - height * scale) / 2) as i32;
+                matrix = (dx, dy, bx - left * dx, by - top * dy);
+                self.scaled = true;
+                break;
+            }
+            scale -= 1;
+        }
+        unsafe {
+            hw::write16(BG2PA, matrix.0 as u16);
+            hw::write16(BG2PB, 0);
+            hw::write16(BG2PC, 0);
+            hw::write16(BG2PD, matrix.1 as u16);
+            core::ptr::write_volatile(BG2X as *mut i32, matrix.2);
+            core::ptr::write_volatile(BG2Y as *mut i32, matrix.3);
+            // Clear both pages so the border shows palette entry 0.
+            hw::dma_fill32(0, VRAM as *mut u32, PAGE_BYTES * 2 / 4);
         }
     }
 
@@ -42,8 +98,14 @@ impl Display {
     pub fn draw(&mut self, screen: &Screen) {
         let width = screen.width.min(WIDTH);
         let height = screen.height.min(HEIGHT).min(screen.pixels.len() / screen.width.max(1));
-        let left = (WIDTH - width) / 2 & !3;
-        let top = (HEIGHT - height) / 2;
+        if self.layout != (width, height) {
+            self.set_layout(width, height);
+        }
+        let (left, top) = if self.scaled {
+            (0, 0)
+        } else {
+            ((WIDTH - width) / 2 & !3, (HEIGHT - height) / 2)
+        };
         let page = VRAM + self.back * PAGE_BYTES;
         let source = screen.pixels.as_ptr() as usize;
         for y in 0..height {

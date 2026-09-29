@@ -83,10 +83,18 @@ pub unsafe fn dma_copy32(source: *const u32, destination: *mut u32, words: usize
     write16(DMA3CNT_H, DMA_ENABLE | DMA_32BIT);
 }
 
+/// Source word for fills. DMA reads memory the compiler does not see, so the
+/// value goes through a volatile store to a static rather than a local.
+static mut FILL_SOURCE: u32 = 0;
+
 /// Fills `words` 32-bit words with `value` using DMA 3.
 pub unsafe fn dma_fill32(value: u32, destination: *mut u32, words: usize) {
-    let source = value;
-    write_volatile(DMA3SAD as *mut u32, &source as *const u32 as u32);
+    if words == 0 {
+        return;
+    }
+    let source = core::ptr::addr_of_mut!(FILL_SOURCE);
+    write_volatile(source, value);
+    write_volatile(DMA3SAD as *mut u32, source as u32);
     write_volatile(DMA3DAD as *mut u32, destination as u32);
     write16(DMA3CNT_L, words as u16);
     write16(DMA3CNT_H, DMA_ENABLE | DMA_32BIT | DMA_SOURCE_FIXED);
