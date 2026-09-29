@@ -43,18 +43,26 @@ bun tools/profile.ts games/jump          # cycle-sampled profile of the last bui
 bun tools/profile.ts games/jump --script="60:RIGHT" --within=blt   # plus hot addresses inside blt
 ```
 
-The ROM prints `stats frames=… game=avg/max present=… late=… heap=… iwram=… stack=…`
-through the mGBA debug console once per second; `tools/run.ts` shows it.
-`game` is CPU cycles per frame for update + draw + sequencer (budget: 280,896
-per VBlank, so 561,792 at 30 fps, less the host's audio and flip work);
-`present` is the copy of the screen to VRAM; `late` counts frames that missed
-their VBlank; `iwram=used/size` is the IWRAM heap after code.
+At boot the ROM logs `screen WxH in IWRAM` (or `EWRAM`). Then, every `fps`
+game frames (one second), it prints
+`stats frames=… game=avg/max present=… late=… heap=… iwram=… stack=…`
+through the mGBA debug console; `tools/run.ts` shows both. `frames` counts
+game frames, while `--script` steps and `profile --skip` count VBlanks
+(60 a second). `game` is CPU cycles per frame for update + draw + sequencer,
+including the mixer interrupt; `present` is the copy of the screen to VRAM.
+Both must fit in 60 / fps VBlanks of 280,896 cycles (561,792 at 30 fps), less
+a little host work: at 30 fps frames start to run late when `game` +
+`present` passes about 520,000. `late` counts frames that missed their VBlank;
+`iwram=used/size` is the IWRAM heap after code.
 
 The emulator is deterministic, so a fixed `--script` gives repeatable
 numbers: compare optimizations by the mean of `game` over the same script,
-not by one window. Read hot addresses from `--within` against
+not by one window. Profile a `--no-inline` build, or small functions merge
+into their callers; percentages are of all time, idle ("halted in BIOS") and
+`present` included. Read hot addresses from `--within` against
 `llvm-objdump -d --triple=armv4t-none-eabi dist/<game>.elf` (the nightly
-toolchain ships `llvm-objdump` under `lib/rustlib/*/bin`).
+toolchain ships `llvm-objdump` under `lib/rustlib/*/bin`). Screenshots of a
+ROM with late frames can be torn: the page flip happened mid-display.
 
 ## Architecture rules
 
@@ -80,10 +88,16 @@ toolchain ships `llvm-objdump` under `lib/rustlib/*/bin`).
   the generated function in IWRAM as ARM code (`tools/lib/iwram.ts`). ARM
   code cannot inline Thumb code (nor generic Rust helpers, iterators or
   trait calls), so a tagged function writes small helpers out inline or calls
-  other tagged functions. IWRAM also holds the model struct, arrays of at
-  most 512 bytes created with it, and the screen when it still fits: if
-  `iwram=` shows the screen no longer fits, `present` and every draw slow
-  down, so keep tagged code small.
+  other tagged functions.
+- IWRAM (32 KiB) is shared, in this order, by tagged code, the model struct
+  (one field per module-level `let` of the SDK and the game, 12 bytes per
+  array), arrays of at most 512 bytes created with the model (up to 1.5 KiB
+  in all; arrays created later, as in `setup()`, go to EWRAM), and last the
+  screen, moved there after boot if it still fits. A screen in EWRAM makes
+  `present` and every draw about a third slower; screens over about 20 KB
+  (200 x 150) never fit. `tests/games.test.ts` requires screens up to
+  160 x 120 to stay in IWRAM: run it after any SDK change, since a few
+  hundred bytes of new code or fields can push Pyxel Jump's screen out.
 - Pixel spans go through MicroTS array builtins, which compile to loops
   without per-element bounds checks: `copyRange` (with a skipped color for
   color keys), `fillRange`, and `copyRect`/`fillRect` for small rectangles
@@ -93,6 +107,16 @@ toolchain ships `llvm-objdump` under `lib/rustlib/*/bin`).
   cells of the transparent color are skipped and single-color cells filled.
   Any write to a bank resets its cells, so games that draw into a bank every
   frame lose this.
+- Drawing to the screen without dither has fast paths, `pal()` mappings
+  included. Dither, drawing into image banks, flipped `bltm` and rotated or
+  scaled `blt` go pixel by pixel through clip, dither and palette checks.
+- Strings cost allocations: each string passed to a function and each `+`
+  copies (1,000 or more cycles each), and `codePoints()` allocates its
+  result. A template string builds its result in one step. Keep per-frame
+  text to what the game shows.
+- Float math is emulated: basic operations cost 50-300 cycles and libm
+  functions (`sqrt`, `atan2`, `pow`, `exp`, `log`) thousands. The SDK's `sin`
+  and `cos` use f32 polynomials instead of libm.
 - MicroTS value semantics: arrays and structs passed as arguments, assigned to
   locals or iterated with `for…of` are copied. In hot code pass indices, not
   arrays, and write through paths (`items[i].x += 1`). Reading `rows[i][j]`

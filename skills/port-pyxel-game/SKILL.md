@@ -30,14 +30,17 @@ Read the whole Python source before writing anything, and note:
   `images[n].load(x, y, "file.png")`. All are baked at build time from the
   manifest; copy the files into `games/<name>/assets/`.
 - **Input**: which keys and gamepad buttons it reads. There is no mouse or
-  text input on the GBA; a game built on the mouse needs a control redesign
-  (ask the user).
+  text input on the GBA. A game played with the mouse needs a control
+  redesign (ask the user); one that only shows or lightly uses the mouse can
+  move a pointer with the D-pad in the game, as `games/draw_api` does.
 - **Audio**: `sounds[n].set(...)`, `sounds[n].mml(...)`, `musics[n].set(...)`,
   `play`, `playm`, `stop`.
 - **Per-frame work**: loops over many entities, float math in them,
-  per-pixel drawing with `pset`, large `blt`/`bltm` areas. These decide
-  whether the game fits the budget of 280,896 cycles per VBlank (561,792 at
-  30 fps).
+  per-pixel drawing with `pset`, large `blt`/`bltm` areas, text and strings
+  built every frame, dither. These decide whether the game fits the frame
+  budget (see `AGENTS.md`: about 520,000 cycles at 30 fps, including the copy
+  of the screen to the display). Note the screen size: up to about 160 x 120
+  the screen lives in fast IWRAM; larger ones make every draw slower.
 - **Python features** that need restructuring: classes (inheritance,
   methods mutating `self`), lists of objects, tuples, dicts and sets,
   closures and lambdas stored in data, generators, recursion, exceptions,
@@ -116,10 +119,12 @@ source. The rules that matter most:
   `round(v)` for `f32` values, and round scaled integers the same way.
 - **Tuples** become small interfaces (`interface Star { x: i32; y: i32 }`).
   Functions returning tuples return a struct literal.
-- **Strings**: build with `+`; `str(n)`, `rjust(s, width)`,
-  `ljust(s, width)`, `zfill(n, width)` cover f-string padding such as
-  `f"{score:5}"` → `rjust(str(score), 5)` and `f"{score:04}"` →
-  `zfill(score, 4)`. Text is drawn with Pyxel's 4 x 6 font.
+- **Strings**: f-strings become template strings; `str(n)`,
+  `rjust(s, width)`, `ljust(s, width)`, `zfill(n, width)` cover padding such
+  as `f"SCORE {score:5}"` → `` `SCORE ${rjust(str(score), 5)}` `` and
+  `f"{score:04}"` → `zfill(score, 4)`. Every string passed or concatenated is
+  copied, so prefer one template string to chains of `+`. Text is drawn with
+  Pyxel's 4 x 6 font.
 - **Randomness**: `pyxel.rndi`/`rndf` exist as `rndi`/`rndf`; map Python's
   `random.randint(a, b)` to `rndi(a, b)` and `random.random()` to
   `rndf(0, 1)`.
@@ -127,9 +132,10 @@ source. The rules that matter most:
   they are mapped to GBA buttons (arrows/WASD → D-pad, Z/SPACE/KP_ENTER → A,
   X/BACKSPACE → B, RETURN → START and A, TAB → SELECT). Change a mapping with
   `mapKey(KEY_X, GBA_B)` in `setup()` when the default changes the game (for
-  example when RETURN restarts a game but A fires). Update on-screen prompts
-  that name PC keys ("PRESS ENTER" → "PRESS START"), keeping their length so
-  centered text stays centered.
+  example when RETURN restarts a game but A fires). Keys with no mapping,
+  such as `KEY_Q`, read as never pressed. Update on-screen prompts that name
+  PC keys ("PRESS ENTER" → "PRESS START"), keeping their length so centered
+  text stays centered.
 - **Things that do nothing on the GBA** (`pyxel.quit()`, window titles,
   mouse cursor) can be dropped or kept as no-ops; say so in a comment.
 - **Sound**: keep sound and music definitions as they are.
@@ -164,7 +170,9 @@ bun tools/run.ts dist/<name>.gba --frames=600 --shot=/tmp/<name>.png --wav=/tmp/
 ```
 
 A script is a list of `frames:KEYS` steps (`-` releases all keys);
-`--shots` saves a screenshot after each step. Look at the screenshots and
+`--shots` saves a screenshot after each step. Step lengths count VBlanks (60
+a second), not game frames: at 30 fps, a scene that starts at game frame 150
+starts after 300 VBlanks. Look at the screenshots and
 check each scene of the game: title, play, game over, scrolling, sound
 effects in the WAV. When Pyxel itself is available (`pip install pyxel`),
 run the original next to the port and compare the screens; for music,
@@ -178,17 +186,20 @@ build, draw, and keep up with its frame rate.
 ## 5. Fit the frame budget
 
 Every second the ROM prints
-`stats frames=… game=avg/max present=… late=… …`. `late` must stay 0 after
-the first second. If it does not:
+`stats frames=… game=avg/max present=… late=… …` (see `AGENTS.md` for the
+fields). `late` must stay 0 after the first second. If it does not:
 
-1. Profile: `bun tools/profile.ts games/<name> --script=...`, then
+1. Profile a `--no-inline` build: `bun tools/build.ts games/<name> --no-inline`,
+   `bun tools/profile.ts games/<name> --script=...`, then
    `--within=<function>` for the hottest addresses of a function.
 2. Fix the game first: floats in per-entity loops, copies of arrays in hot
    code (`for…of` over big arrays of structs, passing arrays), per-pixel
    `pset` loops that a `rect`, `blt` or `bltm` could do.
 3. If the SDK is the bottleneck, improve `sdk/` for every game and follow
    the performance rules in `AGENTS.md` (`@iwram`, IWRAM budget, array
-   builtins). Compare changes by the mean `game` value over the same script.
+   builtins). Compare changes by the mean `game` value over the same script,
+   and run `bun test tests/games.test.ts` afterwards: SDK code and fields
+   take IWRAM that other games' screens need.
 
 ## 6. Finish
 

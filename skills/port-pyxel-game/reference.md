@@ -1,5 +1,10 @@
 # Pyxel API → Pocket Pyxel SDK
 
+Naming: module functions keep Pyxel's names in camelCase; methods of
+`pyxel.images[n]` become `img*(n, …)` and those of `pyxel.tilemaps[n]`
+`tilemap*(n, …)`, except the short `tget`/`tset`. New SDK functions follow
+the same pattern.
+
 Everything below is imported from `"pyxel"` (`sdk/pyxel.ts`) unless marked
 _std_, which is `@pocketjs/framework/solid/std`. Integer parameters are
 `i32`; Pyxel's float coordinates become integers (round with `round(v)`).
@@ -43,6 +48,7 @@ Name clashes with _std_: import _std_'s `fill` under another name
 | `pyxel.images[n].load(x, y, "a.png")`                  | `"images"` in `pyxel.json` (baked, drop the call)                                                                                                    |
 | `pyxel.tilemaps[n].pget(x, y)` / `tile`                | `tget(n, x, y)` returns a tile value; `tile(tx, ty)`, `tileX(t)`, `tileY(t)`                                                                         |
 | `pyxel.tilemaps[n].pset(x, y, (tx, ty))`               | `tset(n, x, y, tile(tx, ty))`                                                                                                                        |
+| `pyxel.tilemaps[n].set(x, y, rows)`                    | `tilemapSet(n, x, y, rows)` (four hex digits per tile)                                                                                               |
 | `pyxel.tilemaps[n].imgsrc`                             | `tilemapImgsrc(n)`, `setTilemapImgsrc(n, img)`                                                                                                       |
 | `pyxel.tilemaps[n].collide(x, y, w, h, dx, dy, walls)` | `collide(n, x, y, w, h, dx, dy, walls(tiles))` → `{ dx, dy }`; register the wall list once with `walls()` in `setup()`                               |
 
