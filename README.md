@@ -29,13 +29,13 @@ export function setup(): void {
 }
 
 export function update(): void {
-  if (input.btn(input.key.left)) x -= 2;
-  if (input.btnp(input.key.space)) sound.play(3, 0);
+  if (input.btn(input.key.LEFT)) x -= 2;
+  if (input.btnp(input.key.SPACE)) sound.play(3, 0);
 }
 
 export function draw(): void {
-  screen.cls(color.navy);
-  screen.rect(x, 60, 16, 16, color.yellow);
+  screen.cls(color.NAVY);
+  screen.rect(x, 60, 16, 16, color.YELLOW);
 }
 ```
 

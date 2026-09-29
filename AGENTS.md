@@ -72,10 +72,11 @@ ROM with late frames can be torn: the page flip happened mid-display.
   (`import { screen, input } from "retro"; screen.cls(0)`): thin wrappers
   over the internal modules (`gfx.ts`, `audio.ts`, `input.ts`, …), resolved
   at compile time, so namespaces cost nothing at run time. Add public
-  functions to the namespace they belong to. `runtime/gba` only does what
-  hardware does: present the indexed screen and palette, sample keys,
-  synthesize the voices the sequencer requests, pace frames. Do not move SDK
-  logic into Rust.
+  functions to the namespace they belong to; constants keep Pyxel's upper
+  case without the prefix the namespace replaces (`color.NAVY`,
+  `input.key.LEFT`). `runtime/gba` only does what hardware does: present
+  the indexed screen and palette, sample keys, synthesize the voices the
+  sequencer requests, pace frames. Do not move SDK logic into Rust.
 - The host reads SDK state through exported fields of `sdk/hw.ts`, which
   MicroTS turns into `hw_<field>()` accessors. The generated root module
   (`tools/build.ts`) calls `boot`, then `frame(keys, audioTicks)` per frame.

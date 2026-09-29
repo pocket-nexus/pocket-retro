@@ -132,15 +132,16 @@ source. The rules that matter most:
 - **Randomness**: `pyxel.rndi`/`rndf` exist as `math.rndi`/`math.rndf`; map
   Python's `random.randint(a, b)` to `math.rndi(a, b)` and `random.random()`
   to `math.rndf(0, 1)`.
-- **Keys**: Pyxel's key and button constants live in `input`: `KEY_LEFT` →
-  `input.key.left`, `KEY_RETURN` → `input.key.enter`, `KEY_0` →
-  `input.key.digit0`, `GAMEPAD1_BUTTON_A` → `input.pad.a`,
-  `GAMEPAD1_BUTTON_DPAD_LEFT` → `input.pad.left`. They are mapped to GBA
+- **Keys**: Pyxel's key and button constants live in `input`, without
+  their prefix: `KEY_LEFT` → `input.key.LEFT`, `KEY_RETURN` →
+  `input.key.RETURN`, `GAMEPAD1_BUTTON_A` → `input.pad.A`,
+  `GAMEPAD1_BUTTON_DPAD_LEFT` → `input.pad.DPAD_LEFT`; only `KEY_0` to
+  `KEY_9` become `input.key.DIGIT_0` to `DIGIT_9`. They are mapped to GBA
   buttons (arrows/WASD → D-pad, Z/SPACE/KP_ENTER → A, X/BACKSPACE → B,
-  ENTER → START and A, TAB → SELECT). Change a mapping with
-  `input.map(input.key.x, input.gba.b)` in `setup()` when the default changes
+  RETURN → START and A, TAB → SELECT). Change a mapping with
+  `input.map(input.key.X, input.gba.B)` in `setup()` when the default changes
   the game (for example when ENTER restarts a game but A fires). Keys with no
-  mapping, such as `input.key.q`, read as never pressed. Update on-screen
+  mapping, such as `input.key.Q`, read as never pressed. Update on-screen
   prompts that name PC keys ("PRESS ENTER" → "PRESS START"), keeping their
   length so centered text stays centered.
 - **Things that do nothing on the GBA** (`pyxel.quit()`, window titles,
