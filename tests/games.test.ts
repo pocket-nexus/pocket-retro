@@ -1,7 +1,9 @@
 /**
  * Builds every game in games/ and plays it headless with scripted input:
- * the ROM must not panic, must draw something, and must keep up with its
- * frame rate after the first second.
+ * the ROM must not panic, must draw something, must keep up with its frame
+ * rate after the first second, and must keep a screen of up to 160 x 120 in
+ * IWRAM (a larger IWRAM footprint of the SDK pushes it out and slows
+ * drawing by about a third).
  *
  *   bun test tests/games.test.ts          (needs `bun run emu:setup` once)
  */
@@ -43,6 +45,9 @@ for (const name of games) {
       }
       const log = gba.logText;
       expect(log).not.toContain("panic");
+      const [, w, h, place] = log.match(/screen (\d+)x(\d+) in (\w+)/) ?? [];
+      expect(place).toBeDefined();
+      if (Number(w) * Number(h) <= 160 * 120) expect(`${w}x${h} in ${place}`).toBe(`${w}x${h} in IWRAM`);
       // Some pixel differs from the first: the game drew something.
       const frame = gba.frame();
       let drawn = false;
