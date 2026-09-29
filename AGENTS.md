@@ -70,6 +70,12 @@ toolchain ships `llvm-objdump` under `lib/rustlib/*/bin`).
   A bank is copied to RAM on its first write; tilemap writes go to an overlay.
 - Rasterization follows pyxel-core `canvas.rs` but uses integer and fixed
   point math: the GBA has no FPU and soft float costs 100+ cycles per op.
+- Sound follows pyxel-core 2.9: `sdk/sound.ts` compiles `Sound.set` data and
+  MML into the command lists Pyxel plays, `sdk/audio.ts` runs them per
+  channel on Pyxel's 1,789,773 Hz clock and emits one voice record per
+  channel per mixer tick (76 samples, 1/239 s), and `runtime/gba/src/audio.rs`
+  synthesizes the records. `tests/sound.test.ts` checks the parser; when
+  changing playback, compare a tune with Pyxel's `pyxel.musics[n].save()`.
 - Performance: hot inner loops carry a `/** @iwram */` doc tag, which places
   the generated function in IWRAM as ARM code (`tools/lib/iwram.ts`). ARM
   code cannot inline Thumb code (nor generic Rust helpers, iterators or
