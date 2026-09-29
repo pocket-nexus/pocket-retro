@@ -1,19 +1,19 @@
 ---
 name: port-pyxel-game
-description: Port a Pyxel (Python) game to Pocket Retro so it runs on a Game Boy Advance. Covers surveying the game, translating Python to the TypeScript Pyxel SDK in sdk/pyxel.ts, baking .pyxres/.pyxpal/PNG resources, building the ROM, playing it headless with scripted input, and profiling it into the frame budget. Use when asked to port, convert or bring a Pyxel game or example to the GBA or to this repository.
+description: Port a Pyxel (Python) game to Pocket Retro so it runs on a Game Boy Advance. Covers surveying the game, translating Python to the TypeScript Pyxel SDK in sdk/retro.ts, baking .pyxres/.pyxpal/PNG resources, building the ROM, playing it headless with scripted input, and profiling it into the frame budget. Use when asked to port, convert or bring a Pyxel game or example to the GBA or to this repository.
 ---
 
 # Port a Pyxel game to the GBA
 
 A port is a hand translation of the game's Python into `games/<name>/game.ts`,
-written against the `"pyxel"` module (`sdk/pyxel.ts`). MicroTS compiles it
+written against the `"retro"` module (`sdk/retro.ts`). MicroTS compiles it
 to Rust ahead of time and `tools/build.ts` links it into a GBA ROM: there is
 no Python or JavaScript on the device, so the translation must stay inside
 the MicroTS subset described below. Do not write an automatic converter and
 do not reimplement Pyxel features inside the game: if the SDK lacks
 something, add it to `sdk/` (TypeScript) for every game.
 
-Read `AGENTS.md` first. Keep `sdk/pyxel.ts` open while translating: it is
+Read `AGENTS.md` first. Keep `sdk/retro.ts` open while translating: it is
 the authoritative list of what the SDK offers, with Pyxel's names in
 camelCase. [reference.md](reference.md) maps Pyxel's API onto it and lists
 what is missing.
@@ -50,12 +50,12 @@ Read the whole Python source before writing anything, and note:
 
 ```
 games/<name>/
-  pyxel.json     manifest
+  retro.json     manifest
   game.ts        the port
   assets/        .pyxres, .pyxpal, .png copied from the original
 ```
 
-`pyxel.json` (see `tools/lib/manifest.ts`):
+`retro.json` (see `tools/lib/manifest.ts`):
 
 ```json
 {
@@ -76,7 +76,7 @@ license (Pyxel's examples are MIT), and exports three functions:
 
 ```ts
 // Pyxel Shooter, ported from pyxel/examples/09_shooter.py (Takashi Kitao, MIT).
-import { cls, init, text } from "pyxel";
+import { cls, init, text } from "retro";
 
 export function setup(): void {} // App.__init__ up to pyxel.run(), including init()
 export function update(): void {} // the update callback

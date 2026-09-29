@@ -19,7 +19,7 @@ import {
   str,
   text,
   width,
-} from "pyxel";
+} from "retro";
 import { abs, len, push, type i32 } from "@pocketjs/framework/solid/std";
 
 interface Floor {

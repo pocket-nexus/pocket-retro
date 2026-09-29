@@ -5,7 +5,7 @@ Naming: module functions keep Pyxel's names in camelCase; methods of
 `tilemap*(n, …)`, except the short `tget`/`tset`. New SDK functions follow
 the same pattern.
 
-Everything below is imported from `"pyxel"` (`sdk/pyxel.ts`) unless marked
+Everything below is imported from `"retro"` (`sdk/retro.ts`) unless marked
 _std_, which is `@pocketjs/framework/solid/std`. Integer parameters are
 `i32`; Pyxel's float coordinates become integers (round with `round(v)`).
 
@@ -13,14 +13,14 @@ _std_, which is `@pocketjs/framework/solid/std`. Integer parameters are
 
 | Pyxel                                      | SDK                                                        |
 | ------------------------------------------ | ---------------------------------------------------------- |
-| `pyxel.init(w, h, title=…, fps=30)`        | `init(w, h, fps)` in `setup()`; title goes in `pyxel.json` |
+| `pyxel.init(w, h, title=…, fps=30)`        | `init(w, h, fps)` in `setup()`; title goes in `retro.json` |
 | `pyxel.run(update, draw)`                  | export `update()` and `draw()`                             |
 | `pyxel.width`, `pyxel.height`              | `width()`, `height()`                                      |
 | `pyxel.frame_count`                        | `frameCount()`                                             |
-| `pyxel.load("x.pyxres")`                   | `"resources"` in `pyxel.json`                              |
+| `pyxel.load("x.pyxres")`                   | `"resources"` in `retro.json`                              |
 | `pyxel.quit()`                             | `quit()` (does nothing)                                    |
 | `pyxel.colors[i] = rgb`, `pyxel.colors[i]` | `setColor(i, rgb)`, `getColor(i)`; `setColors(list)`       |
-| `.pyxpal` palette                          | `"palette"` in `pyxel.json`                                |
+| `.pyxpal` palette                          | `"palette"` in `retro.json`                                |
 
 ## Drawing (screen)
 
@@ -45,7 +45,7 @@ Name clashes with _std_: import _std_'s `fill` under another name
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pyxel.images[n].pset(...)`, `.cls`, …                 | `imgPset(n, ...)`, `imgCls`, `imgLine`, `imgRect`, `imgRectb`, `imgCirc`, `imgCircb`, `imgTri`, `imgFill`, `imgBlt`, `imgBltm`, `imgText`, `imgPget` |
 | `pyxel.images[n].set(x, y, rows)`                      | `imgSet(n, x, y, rows)`                                                                                                                              |
-| `pyxel.images[n].load(x, y, "a.png")`                  | `"images"` in `pyxel.json` (baked, drop the call)                                                                                                    |
+| `pyxel.images[n].load(x, y, "a.png")`                  | `"images"` in `retro.json` (baked, drop the call)                                                                                                    |
 | `pyxel.tilemaps[n].pget(x, y)` / `tile`                | `tget(n, x, y)` returns a tile value; `tile(tx, ty)`, `tileX(t)`, `tileY(t)`                                                                         |
 | `pyxel.tilemaps[n].pset(x, y, (tx, ty))`               | `tset(n, x, y, tile(tx, ty))`                                                                                                                        |
 | `pyxel.tilemaps[n].set(x, y, rows)`                    | `tilemapSet(n, x, y, rows)` (four hex digits per tile)                                                                                               |
@@ -55,7 +55,7 @@ Name clashes with _std_: import _std_'s `fill` under another name
 Tile tuples `(tx, ty)` are single `i32` values; compare them with `===`.
 The first write to an image bank copies it into RAM: 64 KiB of the 256 KiB
 work RAM per written bank, and slower tilemap drawing from it afterwards.
-Prefer baking images (`"images"` in `pyxel.json`) to drawing them at start.
+Prefer baking images (`"images"` in `retro.json`) to drawing them at start.
 
 ## Input
 

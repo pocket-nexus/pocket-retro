@@ -27,7 +27,7 @@ import {
   stop,
   text,
   zfill,
-} from "pyxel";
+} from "retro";
 import { idiv, insert, len, pop, push, type i32 } from "@pocketjs/framework/solid/std";
 
 const SCREEN_W = 40;

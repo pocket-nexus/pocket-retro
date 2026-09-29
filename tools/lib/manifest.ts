@@ -1,4 +1,4 @@
-/** `pyxel.json`: how the build tools find a game's entry and resources. */
+/** `retro.json`: how the build tools find a game's entry and resources. */
 import { existsSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
@@ -18,7 +18,7 @@ export interface Manifest {
 }
 
 export function readManifest(directory: string): Manifest {
-  const path = resolve(directory, "pyxel.json");
+  const path = resolve(directory, "retro.json");
   const raw = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
   const title = String(raw.title ?? basename(directory));
   const manifest: Manifest = {

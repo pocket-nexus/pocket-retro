@@ -10,10 +10,10 @@ JavaScript engine and no Python on the device.
 
 | Path            | Contents                                                                                          |
 | --------------- | ------------------------------------------------------------------------------------------------- |
-| `sdk/`          | The Pyxel API in TypeScript. Games import it as `"pyxel"` (`pyxel.ts` is the only public module)  |
+| `sdk/`          | The Pyxel API in TypeScript. Games import it as `"retro"` (`retro.ts` is the only public module)  |
 | `sdk/assets.ts` | Stub of the per-game asset module that `tools/lib/assets.ts` generates at build time              |
 | `runtime/gba/`  | Rust host: boot, IRQ, Mode 4 display, keypad, 4-voice mixer, heaps, `Game` trait, linker script   |
-| `games/<name>/` | Ported games: `game.ts` (setup, update, draw), `pyxel.json` manifest, `assets/`                   |
+| `games/<name>/` | Ported games: `game.ts` (setup, update, draw), `retro.json` manifest, `assets/`                   |
 | `tools/`        | `build.ts` (game → ROM), `run.ts` (headless play, screenshots, WAV), `profile.ts` (cycle profile) |
 | `tools/lib/`    | `.pyxres`/`.pyxpal` reader, asset baker, ROM packer, IWRAM placement, PNG and zip codecs          |
 | `tools/emu/`    | Headless mGBA: `setup.ts` builds `libmgba` + `shim.c`, `mgba.ts` binds it                         |
@@ -73,7 +73,7 @@ ROM with late frames can be torn: the page flip happened mid-display.
 - The host reads SDK state through exported fields of `sdk/hw.ts`, which
   MicroTS turns into `hw_<field>()` accessors. The generated root module
   (`tools/build.ts`) calls `boot`, then `frame(keys, audioTicks)` per frame.
-- Resources are baked at build time (`pyxel.json` → `tools/lib/assets.ts`):
+- Resources are baked at build time (`retro.json` → `tools/lib/assets.ts`):
   image banks and tilemaps become embedded cartridge data, read in place.
   A bank is copied to RAM on its first write; tilemap writes go to an overlay.
 - Rasterization follows pyxel-core `canvas.rs` but uses integer and fixed

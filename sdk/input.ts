@@ -17,7 +17,7 @@ export const GBA_DOWN: I32 = 128;
 export const GBA_R: I32 = 256;
 export const GBA_L: I32 = 512;
 
-/** Number of key ids; pyxel.ts numbers its KEY_* and GAMEPAD* constants below this. */
+/** Number of key ids; retro.ts numbers its KEY_* and GAMEPAD* constants below this. */
 export const KEY_COUNT: I32 = 128;
 
 let buttons: I32 = 0;

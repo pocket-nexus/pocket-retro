@@ -30,7 +30,7 @@ import {
   tile,
   tileX,
   walls,
-} from "pyxel";
+} from "retro";
 import { abs, f32, filter, len, push, type f32 as F32, type i32 } from "@pocketjs/framework/solid/std";
 
 const TRANSPARENT_COLOR = 2;

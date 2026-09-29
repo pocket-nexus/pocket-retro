@@ -42,7 +42,7 @@ import {
   str,
   text,
   width,
-} from "pyxel";
+} from "retro";
 import { f32, filter, len, push, type i32 } from "@pocketjs/framework/solid/std";
 
 const SCENE_TITLE = 0;

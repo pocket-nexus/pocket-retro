@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "paths": {
-      "pyxel": ["../sdk/pyxel.ts"],
+      "retro": ["../sdk/retro.ts"],
       "@pocketjs/framework/solid/std": ["../../pocketjs/framework/src/std-microts.ts"]
     }
   },

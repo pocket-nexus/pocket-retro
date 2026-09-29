@@ -1,4 +1,4 @@
-import { init, cls, rect, pset, btn, frameCount, text, circ, line, tri, KEY_LEFT, KEY_RIGHT, rndi } from "pyxel";
+import { init, cls, rect, pset, btn, frameCount, text, circ, line, tri, KEY_LEFT, KEY_RIGHT, rndi } from "retro";
 import { imod, type i32 } from "@pocketjs/framework/solid/std";
 
 let x: i32 = 20;

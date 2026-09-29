@@ -39,7 +39,7 @@ import {
   text,
   tilemapSet,
   width,
-} from "pyxel";
+} from "retro";
 import { f32, type f32 as F32, type i32 } from "@pocketjs/framework/solid/std";
 
 // The mouse pointer: pyxel-core's cursor image (settings.rs CURSOR_DATA),
@@ -76,7 +76,7 @@ export function setup(): void {
   mouseY = floordiv(height(), 2);
 
   // pyxel.images[0].load(0, 0, "assets/cat_16x16.png") and
-  // pyxel.images[1].load(0, 0, "assets/tileset_24x32.png") are in pyxel.json.
+  // pyxel.images[1].load(0, 0, "assets/tileset_24x32.png") are in retro.json.
 
   tilemapSet(0, 0, 0, [
     "0201 0000 0200 0400 0100 0000 0003 0103 0203 0000 0002",

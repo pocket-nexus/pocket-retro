@@ -27,7 +27,7 @@ const SCRIPTS: Record<string, string> = {
 };
 
 const games = readdirSync(resolve(ROOT, "games"), { withFileTypes: true })
-  .filter((entry) => entry.isDirectory() && existsSync(resolve(ROOT, "games", entry.name, "pyxel.json")))
+  .filter((entry) => entry.isDirectory() && existsSync(resolve(ROOT, "games", entry.name, "retro.json")))
   .map((entry) => entry.name);
 
 test("every game has a script", () => {
