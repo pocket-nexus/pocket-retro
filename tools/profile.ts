@@ -32,15 +32,21 @@ async function symbols(elf: string): Promise<Symbol[]> {
     stdout: "pipe",
   });
   const text = await new Response(child.stdout).text();
-  return text
+  const table = text
     .split("\n")
-    .map((line) => line.match(/^([0-9a-f]+) ([0-9a-f]+) [tTwW] (.+)$/))
+    .map((line) => line.match(/^([0-9a-f]+)(?: ([0-9a-f]+))? [tTwW] (.+)$/))
     .filter((match): match is RegExpMatchArray => !!match)
     .map((match) => ({
       address: Number.parseInt(match[1]!, 16) & ~1,
-      size: Number.parseInt(match[2]!, 16),
+      size: Number.parseInt(match[2] ?? "0", 16),
       name: match[3]!,
     }));
+  // Assembly labels (memset's loops in start.s) have no size: they run to the next symbol.
+  table.forEach((symbol, index) => {
+    const next = table[index + 1];
+    if (symbol.size === 0 && next) symbol.size = next.address - symbol.address;
+  });
+  return table;
 }
 
 /** TypeScript names of generated model functions, written by tools/build.ts. */
