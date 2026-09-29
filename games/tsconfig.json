@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "pyxel": ["../sdk/pyxel.ts"],
+      "@pocketjs/framework/solid/std": ["../../pocketjs/framework/src/std-microts.ts"]
+    }
+  },
+  "include": ["**/*.ts", "../sdk/**/*.ts"]
+}
