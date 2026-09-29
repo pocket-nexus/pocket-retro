@@ -47,6 +47,8 @@ let clipY1: I32[] = [0, 0, 0, 0];
 let clipX2: I32[] = [255, 255, 255, 0];
 let clipY2: I32[] = [255, 255, 255, 0];
 let palMap: U8[] = fill(1024, 0);
+/** Every color mapped to itself, which resetColorMap() copies; made at run time to stay out of IWRAM. */
+let identityMap: U8[] = [];
 let palIdentity: boolean[] = [true, true, true, true];
 /** Bit (y & 3) * 4 + (x & 3) set where a pixel may be written. */
 let ditherMask: I32[] = [ALL_PIXELS, ALL_PIXELS, ALL_PIXELS, ALL_PIXELS];
@@ -64,9 +66,12 @@ let cellColors: I16[] = fill(3 * 1024, i16(UNKNOWN));
 let cellsStale: boolean[] = [false, false, false];
 
 export function resetSurfaces(): void {
+  if (len(identityMap) === 0) {
+    identityMap = fill(256, u8(0));
+    for (let c = 0; c < 256; c++) identityMap[c] = u8(c);
+  }
   for (let s = 0; s < 4; s++) {
-    for (let c = 0; c < 256; c++) palMap[s * 256 + c] = u8(c);
-    palIdentity[s] = true;
+    resetColorMap(s);
     camX[s] = 0;
     camY[s] = 0;
     ditherMask[s] = ALL_PIXELS;
@@ -112,7 +117,7 @@ export function mapColor(s: I32, from: I32, to: I32): void {
 }
 
 export function resetColorMap(s: I32): void {
-  for (let c = 0; c < 256; c++) palMap[s * 256 + c] = u8(c);
+  copyRange(palMap, s * 256, identityMap, 0, 256);
   palIdentity[s] = true;
 }
 
@@ -184,6 +189,15 @@ function put(s: I32, x: I32, y: I32, value: I32): void {
   else banks[s][y * IMAGE_SIZE + x] = u8(value);
 }
 
+/**
+ * put() for the screen without dither: outlines cut by the clip rectangle
+ * plot their pixels here rather than with a call into IWRAM each.
+ */
+function plot(x: I32, y: I32, color: U8): void {
+  if (x >= clipX1[SCREEN] && x <= clipX2[SCREEN] && y >= clipY1[SCREEN] && y <= clipY2[SCREEN])
+    screen[y * width + x] = color;
+}
+
 export function pget(s: I32, x: I32, y: I32): I32 {
   if (x < clipX1[s] || x > clipX2[s] || y < clipY1[s] || y > clipY2[s]) return 0;
   return read(s, x, y);
@@ -223,7 +237,15 @@ function column(s: I32, y1: I32, y2: I32, x: I32, value: I32): void {
   if (x < clipX1[s] || x > clipX2[s]) return;
   const top = y1 < clipY1[s] ? clipY1[s] : y1;
   const bottom = y2 > clipY2[s] ? clipY2[s] : y2;
-  for (let y = top; y <= bottom; y++) put(s, x, y, value);
+  if (top > bottom) return;
+  // A column is a one pixel wide rectangle.
+  if (ditherMask[s] !== ALL_PIXELS) {
+    for (let y = top; y <= bottom; y++) put(s, x, y, value);
+  } else if (s === SCREEN) {
+    fillRect(screen, top * width + x, width, 1, bottom - top + 1, u8(value));
+  } else {
+    fillRect(banks[s], top * IMAGE_SIZE + x, IMAGE_SIZE, 1, bottom - top + 1, u8(value));
+  }
 }
 
 // ---- Shapes --------------------------------------------------------------
@@ -301,6 +323,26 @@ function diagonal(
   // A 20-bit fraction keeps minor << 20 and slope * i inside 32 bits for spans up to 2047.
   const exact = major > 2047;
   const slope = exact ? 0 : divRound(minor << 20, major);
+  // On the screen without dither, a line inside the clip rectangle is
+  // written directly and one cut by it goes through plot().
+  if (!exact && s === SCREEN && ditherMask[s] === ALL_PIXELS) {
+    const color = u8(value),
+      half = 1 << 19;
+    const low = minor < 0 ? minorStart + minor : minorStart,
+      high = minor < 0 ? minorStart : minorStart + minor;
+    const inside = horizontal
+      ? majorStart >= clipX1[s] && majorStart + major <= clipX2[s] && low >= clipY1[s] && high <= clipY2[s]
+      : majorStart >= clipY1[s] && majorStart + major <= clipY2[s] && low >= clipX1[s] && high <= clipX2[s];
+    for (let i = 0; i <= major; i++) {
+      const step = slope * i,
+        offset = step >= 0 ? (step + half) >> 20 : -((-step + half) >> 20);
+      const px = horizontal ? majorStart + i : minorStart + offset,
+        py = horizontal ? minorStart + offset : majorStart + i;
+      if (inside) screen[py * width + px] = color;
+      else plot(px, py, color);
+    }
+    return;
+  }
   for (let i = 0; i <= major; i++) {
     const offset = exact ? divRound(minor * i, major) : roundFixed(slope * i, 20);
     if (horizontal) put(s, majorStart + i, minorStart + offset, value);
@@ -314,7 +356,17 @@ export function rect(s: I32, x: I32, y: I32, w: I32, h: I32, col: I32): void {
   const value = mapped(s, col),
     left = x - camX[s],
     top = y - camY[s];
-  for (let j = top; j < top + h; j++) row(s, left, left + w - 1, j, value);
+  if (ditherMask[s] !== ALL_PIXELS) {
+    for (let j = top; j < top + h; j++) row(s, left, left + w - 1, j, value);
+    return;
+  }
+  const x1 = larger(left, clipX1[s]),
+    y1 = larger(top, clipY1[s]),
+    x2 = left + w - 1 < clipX2[s] ? left + w - 1 : clipX2[s],
+    y2 = top + h - 1 < clipY2[s] ? top + h - 1 : clipY2[s];
+  if (x1 > x2 || y1 > y2) return;
+  if (s === SCREEN) fillRect(screen, y1 * width + x1, width, x2 - x1 + 1, y2 - y1 + 1, u8(value));
+  else fillRect(banks[s], y1 * IMAGE_SIZE + x1, IMAGE_SIZE, x2 - x1 + 1, y2 - y1 + 1, u8(value));
 }
 
 export function rectb(s: I32, x: I32, y: I32, w: I32, h: I32, col: I32): void {
@@ -355,18 +407,57 @@ function ellipseArea(c2x: I32, c2y: I32, a: I32, b: I32, x: I32): void {
   areaY2 = roundFixed(cy + dy + 3, 8);
 }
 
+// Circles are ellipseArea(0, 0, 2r, 2r, xi) for xi = 0..r: column xi spans
+// -span..span, where span depends on r and xi only, so small radii keep it.
+const CIRCLE_CACHE: I32 = 64;
+/** circleSpan(r, xi) at (r * (r + 1)) / 2 + xi for r < CIRCLE_CACHE, -1 until computed. */
+let circleSpans: I16[] = [];
+
+/** The half-height of column xi of a circle of radius r, as ellipseArea() computes it. */
+function circleSpan(r: I32, xi: I32): I32 {
+  if (r >= CIRCLE_CACHE) {
+    ellipseArea(0, 0, 2 * r, 2 * r, xi);
+    return areaY2;
+  }
+  if (len(circleSpans) === 0) circleSpans = fill((CIRCLE_CACHE * (CIRCLE_CACHE + 1)) >> 1, i16(-1));
+  const at = ((r * (r + 1)) >> 1) + xi;
+  if (circleSpans[at] < 0) {
+    ellipseArea(0, 0, 2 * r, 2 * r, xi);
+    circleSpans[at] = i16(areaY2);
+  }
+  return i32(circleSpans[at]);
+}
+
 export function circ(s: I32, x: I32, y: I32, r: I32, col: I32): void {
   if (r < 0) return;
   writable(s);
   const value = mapped(s, col),
     cx = x - camX[s],
     cy = y - camY[s];
-  for (let xi = 0; xi <= r; xi++) {
-    ellipseArea(0, 0, 2 * r, 2 * r, xi);
-    column(s, cy + areaY1, cy + areaY2, cx + areaX1, value);
-    column(s, cy + areaY1, cy + areaY2, cx + areaX2, value);
-    row(s, cx + areaY1, cx + areaY2, cy + areaX1, value);
-    row(s, cx + areaY1, cx + areaY2, cy + areaX2, value);
+  // canvas.rs fills column xi and row xi for each xi. Spans shrink as xi
+  // grows, so their union is one run per row k: as wide as row k and the
+  // columns 0..m that reach it. Inside the screen's clip rectangle the runs
+  // are filled directly.
+  const inside =
+    s === SCREEN &&
+    ditherMask[s] === ALL_PIXELS &&
+    cx - r >= clipX1[s] &&
+    cx + r <= clipX2[s] &&
+    cy - r >= clipY1[s] &&
+    cy + r <= clipY2[s];
+  const color = u8(value);
+  let m = r;
+  for (let k = 0; k <= r; k++) {
+    while (m > 0 && circleSpan(r, m) < k) m--;
+    const span = circleSpan(r, k),
+      half = span > m ? span : m;
+    if (inside) {
+      fillRange(screen, (cy - k) * width + cx - half, (cy - k) * width + cx + half + 1, color);
+      if (k > 0) fillRange(screen, (cy + k) * width + cx - half, (cy + k) * width + cx + half + 1, color);
+    } else {
+      row(s, cx - half, cx + half, cy - k, value);
+      if (k > 0) row(s, cx - half, cx + half, cy + k, value);
+    }
   }
 }
 
@@ -376,16 +467,47 @@ export function circb(s: I32, x: I32, y: I32, r: I32, col: I32): void {
   const value = mapped(s, col),
     cx = x - camX[s],
     cy = y - camY[s];
+  // A circle inside the screen's clip rectangle is written directly, one
+  // partly inside it through plot().
+  if (s === SCREEN && ditherMask[s] === ALL_PIXELS) {
+    const color = u8(value);
+    if (cx - r >= clipX1[s] && cx + r <= clipX2[s] && cy - r >= clipY1[s] && cy + r <= clipY2[s]) {
+      for (let xi = 0; xi <= r; xi++) {
+        const span = circleSpan(r, xi);
+        screen[(cy - span) * width + cx - xi] = color;
+        screen[(cy - span) * width + cx + xi] = color;
+        screen[(cy + span) * width + cx - xi] = color;
+        screen[(cy + span) * width + cx + xi] = color;
+        screen[(cy - xi) * width + cx - span] = color;
+        screen[(cy + xi) * width + cx - span] = color;
+        screen[(cy - xi) * width + cx + span] = color;
+        screen[(cy + xi) * width + cx + span] = color;
+      }
+      return;
+    }
+    for (let xi = 0; xi <= r; xi++) {
+      const span = circleSpan(r, xi);
+      plot(cx - xi, cy - span, color);
+      plot(cx + xi, cy - span, color);
+      plot(cx - xi, cy + span, color);
+      plot(cx + xi, cy + span, color);
+      plot(cx - span, cy - xi, color);
+      plot(cx - span, cy + xi, color);
+      plot(cx + span, cy - xi, color);
+      plot(cx + span, cy + xi, color);
+    }
+    return;
+  }
   for (let xi = 0; xi <= r; xi++) {
-    ellipseArea(0, 0, 2 * r, 2 * r, xi);
-    put(s, cx + areaX1, cy + areaY1, value);
-    put(s, cx + areaX2, cy + areaY1, value);
-    put(s, cx + areaX1, cy + areaY2, value);
-    put(s, cx + areaX2, cy + areaY2, value);
-    put(s, cx + areaY1, cy + areaX1, value);
-    put(s, cx + areaY1, cy + areaX2, value);
-    put(s, cx + areaY2, cy + areaX1, value);
-    put(s, cx + areaY2, cy + areaX2, value);
+    const span = circleSpan(r, xi);
+    put(s, cx - xi, cy - span, value);
+    put(s, cx + xi, cy - span, value);
+    put(s, cx - xi, cy + span, value);
+    put(s, cx + xi, cy + span, value);
+    put(s, cx - span, cy - xi, value);
+    put(s, cx - span, cy + xi, value);
+    put(s, cx + span, cy - xi, value);
+    put(s, cx + span, cy + xi, value);
   }
 }
 
@@ -611,13 +733,51 @@ function blockToScreen(img: I32, si: I32, di: I32, w: I32, h: I32, step: I32, st
   }
 }
 
+/**
+ * blockToScreen through the screen's draw palette, for blits while pal()
+ * maps colors: `key` is compared with the source color before mapping.
+ */
+/** @iwram */
+function blockToScreenMapped(img: I32, si: I32, di: I32, w: I32, h: I32, step: I32, stride: I32, key: I32): void {
+  if (len(banks[img]) > 0) {
+    bankToScreenMapped(img, si, di, w, h, step, stride, key);
+    return;
+  }
+  const map = SCREEN * 256;
+  let from = img * BANK_BYTES + si,
+    to = di;
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const c = i32(IMAGES[from + step * i]);
+      if (c !== key) screen[to + i] = palMap[map + c];
+    }
+    from += stride;
+    to += width;
+  }
+}
+
+/** blockToScreenMapped from a bank copied to RAM. */
+function bankToScreenMapped(img: I32, si: I32, di: I32, w: I32, h: I32, step: I32, stride: I32, key: I32): void {
+  const map = SCREEN * 256;
+  for (let j = 0; j < h; j++) {
+    const from = si + j * stride,
+      to = di + j * width;
+    for (let i = 0; i < w; i++) {
+      const c = i32(banks[img][from + step * i]);
+      if (c !== key) screen[to + i] = palMap[map + c];
+    }
+  }
+}
+
 /** A color key the block copies can skip: colors are bytes, so larger keys match nothing. */
 function blockKey(key: I32): I32 {
   return key > 255 ? -1 : key;
 }
 
-/** A screen row from any source with key, flip and draw palette. */
-/** @iwram */
+/**
+ * A row from any source with key, flip and draw palette, for blits through
+ * dither or into an image bank; blits to the screen take the block copies.
+ */
 function rowGeneric(s: I32, img: I32, dx: I32, dy: I32, sx: I32, sy: I32, step: I32, n: I32, key: I32): void {
   for (let i = 0; i < n; i++) {
     const c = read(img, sx + step * i, sy);
@@ -637,10 +797,11 @@ export function blt(s: I32, x: I32, y: I32, img: I32, u: I32, v: I32, w: I32, h:
   writable(s);
   copyArea(s, x - camX[s], y - camY[s], u, v, surfaceWidth(img) - 1, surfaceHeight(img) - 1, w, h);
   if (copyW === 0 || copyH === 0) return;
-  if (s === SCREEN && img < SCREEN && ditherMask[s] === ALL_PIXELS && palIdentity[s]) {
+  if (s === SCREEN && img < SCREEN && ditherMask[s] === ALL_PIXELS) {
     const si = (copySrcY + copyOffY) * IMAGE_SIZE + copySrcX + copyOffX,
       di = copyDstY * width + copyDstX;
-    blockToScreen(img, si, di, copyW, copyH, copySignX, copySignY * IMAGE_SIZE, blockKey(key));
+    if (palIdentity[s]) blockToScreen(img, si, di, copyW, copyH, copySignX, copySignY * IMAGE_SIZE, blockKey(key));
+    else blockToScreenMapped(img, si, di, copyW, copyH, copySignX, copySignY * IMAGE_SIZE, blockKey(key));
     return;
   }
   for (let yi = 0; yi < copyH; yi++)
@@ -825,16 +986,10 @@ export function bltm(s: I32, x: I32, y: I32, m: I32, u: I32, v: I32, w: I32, h: 
   copyArea(s, x - camX[s], y - camY[s], u, v, TILEMAP_SIZE * 8 - 1, TILEMAP_SIZE * 8 - 1, w, h);
   if (copyW === 0 || copyH === 0) return;
   const img = tilemapSources[m];
-  if (
-    s === SCREEN &&
-    img < SCREEN &&
-    copySignX > 0 &&
-    copySignY > 0 &&
-    ditherMask[s] === ALL_PIXELS &&
-    palIdentity[s]
-  ) {
+  if (s === SCREEN && img < SCREEN && copySignX > 0 && copySignY > 0 && ditherMask[s] === ALL_PIXELS) {
     refreshCells(img);
-    tilesToScreen(m, img, blockKey(key));
+    if (palIdentity[s]) tilesToScreen(m, img, blockKey(key));
+    else tilesToScreenMapped(m, img, blockKey(key));
     return;
   }
   for (let yi = 0; yi < copyH; yi++) {
@@ -886,6 +1041,35 @@ function tilesToScreen(m: I32, img: I32, key: I32): void {
       else if (inRam) copyRect(screen, di, width, banks[img], si, IMAGE_SIZE, cols, rows, u8(key));
       else if (key < 0) copyRect(screen, di, width, IMAGES, img * BANK_BYTES + si, IMAGE_SIZE, cols, rows);
       else copyRect(screen, di, width, IMAGES, img * BANK_BYTES + si, IMAGE_SIZE, cols, rows, u8(key));
+    }
+  }
+}
+
+/**
+ * tilesToScreen through the screen's draw palette, for bltm while pal() maps
+ * colors. It stays out of IWRAM: pal() during a tilemap draw is rare.
+ */
+function tilesToScreenMapped(m: I32, img: I32, key: I32): void {
+  const right = copySrcX + copyW - 1,
+    bottom = copySrcY + copyH - 1;
+  for (let ty = copySrcY >> 3; ty <= bottom >> 3; ty++) {
+    const top = copySrcY > ty * 8 ? copySrcY - ty * 8 : 0,
+      rows = (bottom - ty * 8 < 7 ? bottom - ty * 8 : 7) - top + 1;
+    const rowStart = (copyDstY + ty * 8 + top - copySrcY) * width + copyDstX - copySrcX;
+    for (let tx = copySrcX >> 3; tx <= right >> 3; tx++) {
+      const value = tget(m, tx, ty);
+      const cx = value & 255,
+        cy = value >> 8;
+      if (cx >= 32 || cy >= 32) continue;
+      let color = i32(cellColors[img * 1024 + cy * 32 + cx]);
+      if (color === UNKNOWN) color = measureCell(img, cx, cy);
+      if (color === key) continue;
+      const left = copySrcX > tx * 8 ? copySrcX - tx * 8 : 0,
+        cols = (right - tx * 8 < 7 ? right - tx * 8 : 7) - left + 1;
+      const di = rowStart + tx * 8 + left,
+        si = (cy * 8 + top) * IMAGE_SIZE + cx * 8 + left;
+      if (color !== MIXED) fillRect(screen, di, width, cols, rows, palMap[SCREEN * 256 + color]);
+      else blockToScreenMapped(img, si, di, cols, rows, 1, IMAGE_SIZE, key);
     }
   }
 }
@@ -996,43 +1180,95 @@ const FONT: I32[] = [
   0x0a44a0, 0x0aa624, 0x0e24e0, 0x64c460, 0x444440, 0xc464c0, 0x6c0000, 0xeeeee0,
 ];
 
-/** Draws one glyph; the screen path writes directly when the glyph is inside the clip rectangle. */
-/** @iwram */
-function glyph(s: I32, x: I32, y: I32, bits: I32, value: I32): void {
-  const inside = x >= clipX1[s] && x + 3 <= clipX2[s] && y >= clipY1[s] && y + 5 <= clipY2[s];
-  if (s === SCREEN && inside && ditherMask[s] === ALL_PIXELS) {
-    const color = u8(value);
-    for (let fy = 0; fy < 6; fy++) {
-      const line = (bits >> (20 - fy * 4)) & 15,
-        at = (y + fy) * width + x;
-      if ((line & 8) !== 0) screen[at] = color;
-      if ((line & 4) !== 0) screen[at + 1] = color;
-      if ((line & 2) !== 0) screen[at + 2] = color;
-      if ((line & 1) !== 0) screen[at + 3] = color;
-    }
+/** Draws the part of one glyph inside the clip rectangle, through dither if it is set. */
+function glyphClipped(s: I32, x: I32, y: I32, bits: I32, value: I32): void {
+  if (s !== SCREEN || ditherMask[s] !== ALL_PIXELS) {
+    for (let fy = 0; fy < 6; fy++)
+      for (let fx = 0; fx < 4; fx++) if (((bits >> (23 - fy * 4 - fx)) & 1) !== 0) put(s, x + fx, y + fy, value);
     return;
   }
-  for (let fy = 0; fy < 6; fy++)
-    for (let fx = 0; fx < 4; fx++) if (((bits >> (23 - fy * 4 - fx)) & 1) !== 0) put(s, x + fx, y + fy, value);
+  // Visible glyph rows first..last and columns left..right.
+  const first = y < clipY1[s] ? clipY1[s] - y : 0,
+    last = y + 5 > clipY2[s] ? clipY2[s] - y : 5,
+    left = clipX1[s] - x,
+    right = clipX2[s] - x;
+  const color = u8(value);
+  for (let fy = first; fy <= last; fy++) {
+    const line = (bits >> (20 - fy * 4)) & 15,
+      at = (y + fy) * width + x;
+    if (line === 0) continue;
+    if ((line & 8) !== 0 && left <= 0 && right >= 0) screen[at] = color;
+    if ((line & 4) !== 0 && left <= 1 && right >= 1) screen[at + 1] = color;
+    if ((line & 2) !== 0 && left <= 2 && right >= 2) screen[at + 2] = color;
+    if ((line & 1) !== 0 && left <= 3 && right >= 3) screen[at + 3] = color;
+  }
+}
+
+/** Writes the set pixels of a glyph, bit 23 being its top left, at screen index `at`. */
+/** @iwram */
+function glyphToScreen(at: I32, bits: I32, color: U8): void {
+  for (let fy = 0; fy < 6; fy++) {
+    const line = (bits >> (20 - fy * 4)) & 15,
+      row = at + fy * width;
+    if ((line & 8) !== 0) screen[row] = color;
+    if ((line & 4) !== 0) screen[row + 1] = color;
+    if ((line & 2) !== 0) screen[row + 2] = color;
+    if ((line & 1) !== 0) screen[row + 3] = color;
+  }
+}
+
+/** A mask of the glyph rows at y that lie in top..bottom, bit 23 being the top left pixel. */
+/** @iwram */
+function rowsShown(y: I32, top: I32, bottom: I32): I32 {
+  const first = y < top ? top - y : 0,
+    last = y + 5 > bottom ? bottom - y : 5;
+  return ((1 << ((last - first + 1) * 4)) - 1) << ((5 - last) * 4);
+}
+
+/** The code points of the string text() draws, kept here so drawText() reads them in place. */
+let textCodes: I32[] = [];
+
+/**
+ * Draws textCodes at (x, y) of surface s in an already mapped color. On the
+ * screen, glyphs whose columns are inside the clip rectangle are written
+ * directly; other glyphs partly inside it go through glyphClipped() and
+ * those wholly outside are skipped.
+ */
+/** @iwram */
+function drawText(s: I32, x: I32, y: I32, value: I32): void {
+  const direct = s === SCREEN && ditherMask[s] === ALL_PIXELS;
+  const left = clipX1[s],
+    top = clipY1[s],
+    right = clipX2[s],
+    bottom = clipY2[s];
+  const color = u8(value);
+  let cx = x,
+    cy = y;
+  for (let i = 0; i < len(textCodes); i++) {
+    const code = textCodes[i];
+    if (code === 10) {
+      cx = x;
+      cy += FONT_HEIGHT;
+      continue;
+    }
+    if (code < 32 || code > 127) continue;
+    const bits = FONT[code - 32];
+    if (direct && cx >= left && cx + 3 <= right && cy + 5 >= top && cy <= bottom) {
+      // Rows outside the clip rectangle are masked off, so glyphs cut by its
+      // top or bottom are written directly too.
+      glyphToScreen(cy * width + cx, cy >= top && cy + 5 <= bottom ? bits : bits & rowsShown(cy, top, bottom), color);
+    } else if (cx + 3 >= left && cx <= right && cy + 5 >= top && cy <= bottom) {
+      glyphClipped(s, cx, cy, bits, value);
+    }
+    cx += FONT_WIDTH;
+  }
 }
 
 /** Draws text with the built-in 4 x 6 font; "\n" starts a new line. */
 export function text(s: I32, x: I32, y: I32, str: string, col: I32): void {
   writable(s);
-  const value = mapped(s, col);
-  let cx = x - camX[s],
-    cy = y - camY[s];
-  const left = cx;
-  for (const code of codePoints(str)) {
-    if (code === 10) {
-      cx = left;
-      cy += FONT_HEIGHT;
-      continue;
-    }
-    if (code < 32 || code > 127) continue;
-    glyph(s, cx, cy, FONT[code - 32], value);
-    cx += FONT_WIDTH;
-  }
+  textCodes = codePoints(str);
+  drawText(s, x - camX[s], y - camY[s], mapped(s, col));
 }
 
 /** Width in pixels of the widest line of text. */
