@@ -1,0 +1,24 @@
+# Formats staged files before every commit and re-stages the result, then
+# checks the commit message against Conventional Commits.
+pre-commit:
+  parallel: true
+  jobs:
+    - name: prettier
+      glob: "*.{ts,tsx,js,json,md,yml,yaml}"
+      exclude:
+        - CLAUDE.md
+      run: bunx prettier --write {staged_files}
+      stage_fixed: true
+    - name: rustfmt
+      glob: "*.rs"
+      run: rustfmt --config-path rustfmt.toml {staged_files}
+      stage_fixed: true
+    - name: clang-format
+      glob: "*.{c,h}"
+      run: clang-format -i {staged_files}
+      stage_fixed: true
+
+commit-msg:
+  jobs:
+    - name: conventional-commits
+      run: bun tools/git/commit-msg.ts {1}

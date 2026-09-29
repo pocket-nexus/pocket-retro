@@ -1,0 +1,8 @@
+node_modules/
+.cache/
+dist/
+build/
+gen/
+target/
+.pocket-build/
+.DS_Store
