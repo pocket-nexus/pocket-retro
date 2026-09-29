@@ -37,12 +37,21 @@ crate), `dist/<game>.gba` and `.elf`, `.cache/` (mGBA, cargo target).
 bun tools/build.ts games/jump            # → dist/jump.gba (add --no-inline for profiling builds)
 bun tools/run.ts dist/jump.gba --script="120:- 30:RIGHT 30:A" --shot=out.png --wav=out.wav
 bun tools/profile.ts games/jump          # cycle-sampled profile of the last build
+bun tools/profile.ts games/jump --script="60:RIGHT" --within=blt   # plus hot addresses inside blt
 ```
 
 The ROM prints `stats frames=… game=avg/max present=… late=… heap=… iwram=… stack=…`
 through the mGBA debug console once per second; `tools/run.ts` shows it.
 `game` is CPU cycles per frame for update + draw + sequencer (budget: 280,896
-per VBlank, so 561,792 at 30 fps); `late` counts frames that missed their VBlank.
+per VBlank, so 561,792 at 30 fps, less the host's audio and flip work);
+`present` is the copy of the screen to VRAM; `late` counts frames that missed
+their VBlank; `iwram=used/size` is the IWRAM heap after code.
+
+The emulator is deterministic, so a fixed `--script` gives repeatable
+numbers: compare optimizations by the mean of `game` over the same script,
+not by one window. Read hot addresses from `--within` against
+`llvm-objdump -d --triple=armv4t-none-eabi dist/<game>.elf` (the nightly
+toolchain ships `llvm-objdump` under `lib/rustlib/*/bin`).
 
 ## Architecture rules
 
@@ -60,12 +69,27 @@ per VBlank, so 561,792 at 30 fps); `late` counts frames that missed their VBlank
   point math: the GBA has no FPU and soft float costs 100+ cycles per op.
 - Performance: hot inner loops carry a `/** @iwram */` doc tag, which places
   the generated function in IWRAM as ARM code (`tools/lib/iwram.ts`). ARM
-  code cannot inline Thumb code, so tagged functions should avoid calling
-  small helpers; IWRAM holds these functions, the screen (moved there when it
-  fits), the model struct and small arrays. Check `iwram=` in the stats line.
+  code cannot inline Thumb code (nor generic Rust helpers, iterators or
+  trait calls), so a tagged function writes small helpers out inline or calls
+  other tagged functions. IWRAM also holds the model struct, arrays of at
+  most 512 bytes created with it, and the screen when it still fits: if
+  `iwram=` shows the screen no longer fits, `present` and every draw slow
+  down, so keep tagged code small.
+- Pixel spans go through MicroTS array builtins, which compile to loops
+  without per-element bounds checks: `copyRange` (with a skipped color for
+  color keys), `fillRange`, and `copyRect`/`fillRect` for small rectangles
+  such as 8 x 8 tiles. Long rows are copied faster by `copyRange` per row.
+  Per-pixel `a[i]` reads and writes each check bounds.
+- Tilemap drawing classifies each 8 x 8 cell of an image bank by color:
+  cells of the transparent color are skipped and single-color cells filled.
+  Any write to a bank resets its cells, so games that draw into a bank every
+  frame lose this.
 - MicroTS value semantics: arrays and structs passed as arguments, assigned to
   locals or iterated with `for…of` are copied. In hot code pass indices, not
-  arrays, and write through paths (`items[i].x += 1`).
+  arrays, and write through paths (`items[i].x += 1`). Reading `rows[i][j]`
+  or `len(rows[i])` does not copy `rows[i]`; a loop that only reads
+  `rows[i]` with `i` fixed and calls no other TypeScript function borrows
+  the row once.
 
 ## Rules
 
