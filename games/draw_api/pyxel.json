@@ -1,0 +1,8 @@
+{
+  "title": "Pyxel Draw API",
+  "code": "PDRW",
+  "images": [
+    { "bank": 0, "x": 0, "y": 0, "file": "assets/cat_16x16.png" },
+    { "bank": 1, "x": 0, "y": 0, "file": "assets/tileset_24x32.png" }
+  ]
+}

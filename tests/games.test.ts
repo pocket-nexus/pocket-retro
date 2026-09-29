@@ -20,6 +20,8 @@ const SCRIPTS: Record<string, string> = {
   snake: "30:- 20:UP 20:LEFT 20:DOWN 200:- 5:START 30:-",
   shooter: "60:- 5:START 60:- 20:A 5:- 20:A 60:LEFT 60:RIGHT+A 60:-",
   platformer: "60:- 120:RIGHT 10:RIGHT+A 90:RIGHT 30:LEFT",
+  // The pal() test runs from frame 150 (VBlank 300); A holds the clip test.
+  draw_api: "60:- 30:RIGHT 30:DOWN 60:A 180:- 120:A 60:LEFT+UP",
 };
 
 const games = readdirSync(resolve(ROOT, "games"), { withFileTypes: true })
