@@ -46,7 +46,8 @@ unsafe impl GlobalAlloc for Allocator {
     }
 }
 
-fn is_iwram(ptr: *const u8) -> bool {
+/// Whether a pointer is in internal work RAM.
+pub fn is_iwram(ptr: *const u8) -> bool {
     (0x0300_0000..0x0300_8000).contains(&(ptr as usize))
 }
 

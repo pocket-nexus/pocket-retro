@@ -83,6 +83,15 @@ unsafe extern "C" fn pyxel_main() -> ! {
 pub fn run<G: Game>(game: &mut G) -> ! {
     game.boot();
     memory::move_to_iwram(game.screen_buffer());
+    {
+        let screen = game.screen();
+        let place = if memory::is_iwram(screen.pixels.as_ptr()) {
+            "IWRAM"
+        } else {
+            "EWRAM"
+        };
+        log!("screen {}x{} in {}", screen.width, screen.height, place);
+    }
     game.voices().clear();
     let mut display = video::Display::new();
     audio::start();
