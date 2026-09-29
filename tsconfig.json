@@ -7,7 +7,10 @@
     "noEmit": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "types": ["bun"]
+    "types": ["bun"],
+    "paths": {
+      "@pocketjs/framework/solid/std": ["../pocketjs/framework/src/std-microts.ts"]
+    }
   },
-  "include": ["tools/**/*.ts"]
+  "include": ["tools/**/*.ts", "tests/**/*.ts"]
 }

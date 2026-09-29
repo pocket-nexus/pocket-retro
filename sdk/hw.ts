@@ -22,7 +22,7 @@ export let colors: i32[] = [];
 export let fps: i32 = 30;
 /**
  * Voice parameters for the mixer, three values per channel per audio tick
- * (1/120 s): tone (0 triangle, 1 square, 2 pulse, 3 noise, -1 silent), phase
+ * (76 samples, about 1/239 s): tone (0 triangle, 1 square, 2 pulse, 3 noise, -1 silent), phase
  * step per sample of a 32-sample waveform in 16.16 fixed point, and amplitude
  * (output = sample * amplitude >> 6 for samples in -15..15). The host drains
  * the list after each frame.

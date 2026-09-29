@@ -73,6 +73,7 @@ import {
   playingNote,
   playingSound,
   playMusic,
+  setMml as audioSetMml,
   setMusic as audioSetMusic,
   setSound as audioSetSound,
   stop as audioStop,
@@ -604,6 +605,15 @@ export function channelPlaying(ch: I32): boolean {
 /** pyxel.sounds[snd].set(notes, tones, volumes, effects, speed). */
 export function soundSet(snd: I32, notes: string, tones: string, volumes: string, effects: string, speed: I32): void {
   audioSetSound(snd, notes, tones, volumes, effects, speed);
+}
+
+/**
+ * pyxel.sounds[snd].mml(code): Pyxel 2's MML (T, Q, V, K, Y, @tone, @ENV,
+ * @VIB, @GLI, O, <, >, L, notes, R, &, [ ]n). The sound plays it instead of
+ * its notes until given empty MML; text with an error leaves it unchanged.
+ */
+export function soundMml(snd: I32, code: string): void {
+  audioSetMml(snd, code);
 }
 
 /** pyxel.musics[msc].set(seq0, seq1, seq2, seq3); channels left out play nothing. */
