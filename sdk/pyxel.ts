@@ -474,6 +474,17 @@ export function imgText(img: I32, x: I32, y: I32, s: string, col: I32): void {
   surfaceText(img, x, y, s, col);
 }
 
+/** The value of a hex digit's character code, or -1 for other characters. */
+function hexDigit(code: I32): I32 {
+  return code >= 48 && code <= 57
+    ? code - 48
+    : code >= 97 && code <= 102
+      ? code - 87
+      : code >= 65 && code <= 70
+        ? code - 55
+        : -1;
+}
+
 /**
  * pyxel.images[img].set(x, y, rows): each row is a string of hex digits,
  * one palette index per pixel.
@@ -482,14 +493,7 @@ export function imgSet(img: I32, x: I32, y: I32, rows: string[]): void {
   for (let j = 0; j < len(rows); j++) {
     let i = 0;
     for (const code of codePoints(rows[j])) {
-      const digit =
-        code >= 48 && code <= 57
-          ? code - 48
-          : code >= 97 && code <= 102
-            ? code - 87
-            : code >= 65 && code <= 70
-              ? code - 55
-              : -1;
+      const digit = hexDigit(code);
       if (digit < 0) continue;
       surfacePset(img, x + i, y + j, digit);
       i++;
@@ -520,6 +524,30 @@ export function tget(tm: I32, x: I32, y: I32): I32 {
 /** pyxel.tilemaps[tm].pset(x, y, tile), in tiles. */
 export function tset(tm: I32, x: I32, y: I32, t: I32): void {
   tileSet(tm, x, y, t);
+}
+
+/**
+ * pyxel.tilemaps[tm].set(x, y, rows): each row is a string of tiles, four
+ * hex digits each, the image tile's x then y ("0201" is tile(2, 1)). Spaces
+ * between tiles are ignored.
+ */
+export function tilemapSet(tm: I32, x: I32, y: I32, rows: string[]): void {
+  for (let j = 0; j < len(rows); j++) {
+    let i = 0,
+      value = 0,
+      digits = 0;
+    for (const code of codePoints(rows[j])) {
+      const digit = hexDigit(code);
+      if (digit < 0) continue;
+      value = (value << 4) | digit;
+      digits++;
+      if (digits < 4) continue;
+      tileSet(tm, x + i, y + j, tileValue(value >> 8, value & 255));
+      i++;
+      value = 0;
+      digits = 0;
+    }
+  }
 }
 
 /** Registers wall tiles for collide() and returns the wall set id (at most 8 sets). */
