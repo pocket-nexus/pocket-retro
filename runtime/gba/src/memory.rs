@@ -19,10 +19,12 @@ unsafe impl Sync for Allocator {}
 
 /// Largest block placed in IWRAM; 0 outside `in_iwram`.
 static mut IWRAM_BLOCKS: usize = 0;
+/// IWRAM heap bytes in use beyond which no block is placed there.
+static mut IWRAM_BUDGET: usize = 0;
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        if layout.size() <= IWRAM_BLOCKS {
+        if layout.size() <= IWRAM_BLOCKS && (*self.iwram.get()).used() + layout.size() <= IWRAM_BUDGET {
             if let Ok(block) = (*self.iwram.get()).allocate_first_fit(layout) {
                 return block.as_ptr();
             }
@@ -50,12 +52,16 @@ fn is_iwram(ptr: *const u8) -> bool {
 
 /// Runs `f` with allocations placed in IWRAM while they fit.
 pub fn in_iwram<T>(f: impl FnOnce() -> T) -> T {
-    in_iwram_up_to(usize::MAX, f)
+    in_iwram_up_to(usize::MAX, usize::MAX, f)
 }
 
-/// Runs `f` with allocations of at most `size` bytes placed in IWRAM while they fit.
-pub fn in_iwram_up_to<T>(size: usize, f: impl FnOnce() -> T) -> T {
-    unsafe { IWRAM_BLOCKS = size };
+/// Runs `f` with allocations of at most `size` bytes placed in IWRAM while
+/// the IWRAM heap stays within `budget` bytes.
+pub fn in_iwram_up_to<T>(size: usize, budget: usize, f: impl FnOnce() -> T) -> T {
+    unsafe {
+        IWRAM_BLOCKS = size;
+        IWRAM_BUDGET = budget;
+    }
     let result = f();
     unsafe { IWRAM_BLOCKS = 0 };
     result
