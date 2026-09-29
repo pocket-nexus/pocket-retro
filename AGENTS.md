@@ -10,7 +10,8 @@ JavaScript engine and no Python on the device.
 
 | Path            | Contents                                                                                          |
 | --------------- | ------------------------------------------------------------------------------------------------- |
-| `sdk/`          | The Pyxel API in TypeScript. Games import it as `"retro"` (`retro.ts` is the only public module)  |
+| `sdk/`          | The Pyxel API in TypeScript. Games import its namespaces from `"retro"` (`sdk/retro.ts`)          |
+| `sdk/api/`      | One public namespace per file (`screen`, `input`, `sound`, …); `retro.ts` re-exports them         |
 | `sdk/assets.ts` | Stub of the per-game asset module that `tools/lib/assets.ts` generates at build time              |
 | `runtime/gba/`  | Rust host: boot, IRQ, Mode 4 display, keypad, 4-voice mixer, heaps, `Game` trait, linker script   |
 | `games/<name>/` | Ported games: `game.ts` (setup, update, draw), `retro.json` manifest, `assets/`                   |
@@ -67,9 +68,14 @@ ROM with late frames can be torn: the page flip happened mid-display.
 ## Architecture rules
 
 - **The SDK is TypeScript.** Pyxel semantics (drawing, input, sequencer,
-  resources) live in `sdk/`. `runtime/gba` only does what hardware does:
-  present the indexed screen and palette, sample keys, synthesize the voices
-  the sequencer requests, pace frames. Do not move SDK logic into Rust.
+  resources) live in `sdk/`. The public API is the namespaces of `sdk/api/`
+  (`import { screen, input } from "retro"; screen.cls(0)`): thin wrappers
+  over the internal modules (`gfx.ts`, `audio.ts`, `input.ts`, …), resolved
+  at compile time, so namespaces cost nothing at run time. Add public
+  functions to the namespace they belong to. `runtime/gba` only does what
+  hardware does: present the indexed screen and palette, sample keys,
+  synthesize the voices the sequencer requests, pace frames. Do not move SDK
+  logic into Rust.
 - The host reads SDK state through exported fields of `sdk/hw.ts`, which
   MicroTS turns into `hw_<field>()` accessors. The generated root module
   (`tools/build.ts`) calls `boot`, then `frame(keys, audioTicks)` per frame.

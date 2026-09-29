@@ -1,22 +1,24 @@
 ---
 name: port-pyxel-game
-description: Port a Pyxel (Python) game to Pocket Retro so it runs on a Game Boy Advance. Covers surveying the game, translating Python to the TypeScript Pyxel SDK in sdk/retro.ts, baking .pyxres/.pyxpal/PNG resources, building the ROM, playing it headless with scripted input, and profiling it into the frame budget. Use when asked to port, convert or bring a Pyxel game or example to the GBA or to this repository.
+description: Port a Pyxel (Python) game to Pocket Retro so it runs on a Game Boy Advance. Covers surveying the game, translating Python to the namespaced TypeScript Pyxel SDK in sdk/retro.ts, baking .pyxres/.pyxpal/PNG resources, building the ROM, playing it headless with scripted input, and profiling it into the frame budget. Use when asked to port, convert or bring a Pyxel game or example to the GBA or to this repository.
 ---
 
 # Port a Pyxel game to the GBA
 
 A port is a hand translation of the game's Python into `games/<name>/game.ts`,
-written against the `"retro"` module (`sdk/retro.ts`). MicroTS compiles it
+written against the `"retro"` module (`sdk/retro.ts`), which groups Pyxel's
+API in namespaces: `system`, `screen`, `image`, `tilemap`, `input`, `sound`,
+`music`, `math`, `text` and `color` (one file each in `sdk/api/`). MicroTS compiles it
 to Rust ahead of time and `tools/build.ts` links it into a GBA ROM: there is
 no Python or JavaScript on the device, so the translation must stay inside
 the MicroTS subset described below. Do not write an automatic converter and
 do not reimplement Pyxel features inside the game: if the SDK lacks
 something, add it to `sdk/` (TypeScript) for every game.
 
-Read `AGENTS.md` first. Keep `sdk/retro.ts` open while translating: it is
-the authoritative list of what the SDK offers, with Pyxel's names in
-camelCase. [reference.md](reference.md) maps Pyxel's API onto it and lists
-what is missing.
+Read `AGENTS.md` first. Keep `sdk/api/` open while translating: it is the
+authoritative list of what the SDK offers, with Pyxel's names in camelCase
+inside each namespace. [reference.md](reference.md) maps Pyxel's API onto it
+and lists what is missing.
 
 ## 1. Survey the game
 
@@ -76,9 +78,9 @@ license (Pyxel's examples are MIT), and exports three functions:
 
 ```ts
 // Pyxel Shooter, ported from pyxel/examples/09_shooter.py (Takashi Kitao, MIT).
-import { cls, init, text } from "retro";
+import { system, screen, color } from "retro";
 
-export function setup(): void {} // App.__init__ up to pyxel.run(), including init()
+export function setup(): void {} // App.__init__ up to pyxel.run(), including system.init()
 export function update(): void {} // the update callback
 export function draw(): void {} // the draw callback
 ```
@@ -104,10 +106,11 @@ source. The rules that matter most:
   becomes `list = filter(list, (e) => e.isAlive)`. Do not remove elements
   while looping over them by index.
 - **Numbers.** Declare integer state as `i32` (the default for integer
-  literals). `/` on integers gives a float: use `floordiv(a, b)` for Python
-  `//` and for `/` on values known to divide evenly, and `mod(a, b)` for
-  Python `%` when an operand can be negative (TypeScript `%` truncates).
-  Convert with `f32(...)` and `int(...)`/`round(...)` explicitly.
+  literals). `/` on integers gives a float: use `math.floordiv(a, b)` for
+  Python `//` and for `/` on values known to divide evenly, and
+  `math.mod(a, b)` for Python `%` when an operand can be negative (TypeScript
+  `%` truncates). Convert with `f32(...)` and `math.int(...)`/`math.round(...)`
+  explicitly.
 - **Floats are slow.** The GBA has no FPU: every float operation is a
   software routine of 50-300 cycles. Keep floats (`f32`) for occasional math,
   but not for state updated every frame for many entities. When a float only
@@ -116,34 +119,39 @@ source. The rules that matter most:
   pixels). Otherwise use 16.16 fixed point, which is visually identical.
 - **Drawing with floats**: Pyxel rounds float coordinates half away from zero
   (`f32::round`). The SDK draws at integer coordinates; convert with
-  `round(v)` for `f32` values, and round scaled integers the same way.
+  `math.round(v)` for `f32` values, and round scaled integers the same way.
 - **Tuples** become small interfaces (`interface Star { x: i32; y: i32 }`).
   Functions returning tuples return a struct literal.
-- **Strings**: f-strings become template strings; `str(n)`,
-  `rjust(s, width)`, `ljust(s, width)`, `zfill(n, width)` cover padding such
-  as `f"SCORE {score:5}"` → `` `SCORE ${rjust(str(score), 5)}` `` and
-  `f"{score:04}"` → `zfill(score, 4)`. Every string passed or concatenated is
+- **Strings**: f-strings become template strings; `text.str(n)`,
+  `text.rjust(s, width)`, `text.ljust(s, width)`, `text.zfill(n, width)` cover
+  padding such as `f"SCORE {score:5}"` →
+  `` `SCORE ${text.rjust(text.str(score), 5)}` `` and `f"{score:04}"` →
+  `text.zfill(score, 4)`. Every string passed or concatenated is
   copied, so prefer one template string to chains of `+`. Text is drawn with
   Pyxel's 4 x 6 font.
-- **Randomness**: `pyxel.rndi`/`rndf` exist as `rndi`/`rndf`; map Python's
-  `random.randint(a, b)` to `rndi(a, b)` and `random.random()` to
-  `rndf(0, 1)`.
-- **Keys**: keep the Pyxel constants (`KEY_LEFT`, `GAMEPAD1_BUTTON_A`, ...):
-  they are mapped to GBA buttons (arrows/WASD → D-pad, Z/SPACE/KP_ENTER → A,
-  X/BACKSPACE → B, RETURN → START and A, TAB → SELECT). Change a mapping with
-  `mapKey(KEY_X, GBA_B)` in `setup()` when the default changes the game (for
-  example when RETURN restarts a game but A fires). Keys with no mapping,
-  such as `KEY_Q`, read as never pressed. Update on-screen prompts that name
-  PC keys ("PRESS ENTER" → "PRESS START"), keeping their length so centered
-  text stays centered.
+- **Randomness**: `pyxel.rndi`/`rndf` exist as `math.rndi`/`math.rndf`; map
+  Python's `random.randint(a, b)` to `math.rndi(a, b)` and `random.random()`
+  to `math.rndf(0, 1)`.
+- **Keys**: Pyxel's key and button constants live in `input`: `KEY_LEFT` →
+  `input.key.left`, `KEY_RETURN` → `input.key.enter`, `KEY_0` →
+  `input.key.digit0`, `GAMEPAD1_BUTTON_A` → `input.pad.a`,
+  `GAMEPAD1_BUTTON_DPAD_LEFT` → `input.pad.left`. They are mapped to GBA
+  buttons (arrows/WASD → D-pad, Z/SPACE/KP_ENTER → A, X/BACKSPACE → B,
+  ENTER → START and A, TAB → SELECT). Change a mapping with
+  `input.map(input.key.x, input.gba.b)` in `setup()` when the default changes
+  the game (for example when ENTER restarts a game but A fires). Keys with no
+  mapping, such as `input.key.q`, read as never pressed. Update on-screen
+  prompts that name PC keys ("PRESS ENTER" → "PRESS START"), keeping their
+  length so centered text stays centered.
 - **Things that do nothing on the GBA** (`pyxel.quit()`, window titles,
   mouse cursor) can be dropped or kept as no-ops; say so in a comment.
 - **Sound**: keep sound and music definitions as they are.
-  `pyxel.sounds[n].set(...)` → `soundSet(n, ...)`,
-  `pyxel.sounds[n].mml(code)` → `soundMml(n, code)` (the same MML text,
+  `pyxel.sounds[n].set(...)` → `sound.set(n, ...)`,
+  `pyxel.sounds[n].mml(code)` → `sound.mml(n, code)` (the same MML text,
   string concatenation included), `pyxel.musics[n].set([a], [b])` →
-  `musicSet(n, [a], [b])`, `play(ch, snd, loop=True, resume=True)` →
-  `play(ch, snd, true, true)`. The SDK plays both kinds of sound as
+  `music.set(n, [a], [b])`, `pyxel.playm(n, loop=True)` →
+  `music.play(n, true)`, `play(ch, snd, loop=True, resume=True)` →
+  `sound.play(ch, snd, true, true)`. The SDK plays both kinds of sound as
   pyxel-core 2.9 does, including envelopes, vibrato, glide and `resume`.
   `play(..., sec=…)` is not supported.
 
@@ -154,8 +162,9 @@ Messages a port commonly meets:
 
 | Message or symptom                                        | Fix                                                                                                                              |
 | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `numeric type cannot change from i32 to f64`              | `/` on integers is float division: use `floordiv`, `idiv` or `>>`                                                                |
+| `numeric type cannot change from i32 to f64`              | `/` on integers is float division: use `math.floordiv`, `idiv` or `>>`                                                           |
 | `unsupported unary operator`                              | `++x`/`--x` inside an expression: increment in its own statement                                                                 |
+| `a namespace names its members; it is not a value`        | namespaces such as `screen` cannot be stored or passed: call `screen.cls(...)` where needed                                      |
 | `private field seeds require constants or literal values` | a module-level `let` starts from literals, constants and `fill(...)` of them; compute anything else in `setup()`                 |
 | `Argument of type 'i32' is not assignable to … 1000000`   | a literal first argument fixes a generic's type: name it as a typed `const`                                                      |
 | a helper's change to an array argument is lost            | arguments are copies: mutate module state, or return the new value                                                               |

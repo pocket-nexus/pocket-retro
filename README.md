@@ -17,6 +17,28 @@ into a ROM. Nothing interprets Python or JavaScript on the console. The game's
 | [Pyxel Shooter](games/shooter/game.ts)       | `09_shooter.py`         |
 | [Pyxel Platformer](games/platformer/game.ts) | `10_platformer.py`      |
 
+A game is three functions against the SDK's namespaces:
+
+```ts
+import { system, screen, input, sound, color } from "retro";
+
+let x = 72;
+
+export function setup(): void {
+  system.init(160, 120);
+}
+
+export function update(): void {
+  if (input.btn(input.key.left)) x -= 2;
+  if (input.btnp(input.key.space)) sound.play(3, 0);
+}
+
+export function draw(): void {
+  screen.cls(color.navy);
+  screen.rect(x, 60, 16, 16, color.yellow);
+}
+```
+
 ## Build a ROM
 
 Prerequisites are listed in [AGENTS.md](AGENTS.md#prerequisites): Bun, a
