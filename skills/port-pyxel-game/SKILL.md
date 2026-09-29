@@ -1,6 +1,6 @@
 ---
 name: port-pyxel-game
-description: Port a Pyxel (Python) game to Pocket Pyxel so it runs on a Game Boy Advance. Covers surveying the game, translating Python to the TypeScript Pyxel SDK in sdk/pyxel.ts, baking .pyxres/.pyxpal/PNG resources, building the ROM, playing it headless with scripted input, and profiling it into the frame budget. Use when asked to port, convert or bring a Pyxel game or example to the GBA or to this repository.
+description: Port a Pyxel (Python) game to Pocket Retro so it runs on a Game Boy Advance. Covers surveying the game, translating Python to the TypeScript Pyxel SDK in sdk/pyxel.ts, baking .pyxres/.pyxpal/PNG resources, building the ROM, playing it headless with scripted input, and profiling it into the frame budget. Use when asked to port, convert or bring a Pyxel game or example to the GBA or to this repository.
 ---
 
 # Port a Pyxel game to the GBA

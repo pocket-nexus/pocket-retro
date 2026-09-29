@@ -1,4 +1,4 @@
-# Pocket Pyxel
+# Pocket Retro
 
 Run [Pyxel](https://github.com/kitao/pyxel) games on a Game Boy Advance.
 
@@ -9,13 +9,13 @@ SDK ahead of time to Rust, which is linked with a small bare-metal GBA host
 into a ROM. Nothing interprets Python or JavaScript on the console. The game's
 `.pyxres` and `.pyxpal` files are baked into the cartridge as they are.
 
-| Game                                         | Source example      |
-| -------------------------------------------- | ------------------- |
-| [Hello Pyxel](games/hello/game.ts)           | `01_hello_pyxel.py` |
-| [Pyxel Jump](games/jump/game.ts)             | `02_jump_game.py`   |
-| [Snake!](games/snake/game.ts)                | `07_snake.py`       |
-| [Pyxel Shooter](games/shooter/game.ts)       | `09_shooter.py`     |
-| [Pyxel Platformer](games/platformer/game.ts) | `10_platformer.py`  |
+| Game                                         | Source example          |
+| -------------------------------------------- | ----------------------- |
+| [Hello Retro](games/hello/game.ts)           | a first test of the SDK |
+| [Pyxel Jump](games/jump/game.ts)             | `02_jump_game.py`       |
+| [Snake!](games/snake/game.ts)                | `07_snake.py`           |
+| [Pyxel Shooter](games/shooter/game.ts)       | `09_shooter.py`         |
+| [Pyxel Platformer](games/platformer/game.ts) | `10_platformer.py`      |
 
 ## Build a ROM
 

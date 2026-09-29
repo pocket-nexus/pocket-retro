@@ -47,7 +47,7 @@ export function frame(keys: i32, ticks: i32): void { beginFrame(keys, ticks); up
 
 function gameCrate(model: string): { cargo: string; main: string } {
   const cargo = `[package]
-name = "pyxel-game"
+name = "retro-game"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -55,7 +55,7 @@ publish = false
 [workspace]
 
 [dependencies]
-pocket-pyxel-gba = { path = ${JSON.stringify(resolve(ROOT, "runtime/gba"))} }
+pocket-retro-gba = { path = ${JSON.stringify(resolve(ROOT, "runtime/gba"))} }
 microts = { path = ${JSON.stringify(resolve(pocketjsRoot(), "engine/crates/microts"))}, features = ["critical-section"] }
 
 [profile.release]
@@ -82,11 +82,11 @@ extern crate alloc;
 mod model;
 
 use model::{AppModel, AppViewModel};
-use pocket_pyxel_gba::{Game, Screen};
+use pocket_retro_gba::{Game, Screen};
 
-struct Pyxel(alloc::boxed::Box<AppModel>);
+struct Model(alloc::boxed::Box<AppModel>);
 
-impl Game for Pyxel {
+impl Game for Model {
     fn boot(&mut self) {
         self.0.boot();
     }
@@ -111,13 +111,13 @@ impl Game for Pyxel {
 }
 
 #[no_mangle]
-extern "C" fn pyxel_game_main() -> ! {
+extern "C" fn retro_game_main() -> ! {
     // The model and its first small arrays go to IWRAM, within 1.5 KiB, leaving
     // room for the screen, which the host moves there after boot.
-    let model = pocket_pyxel_gba::memory::in_iwram_up_to(512, 1536, AppModel::default);
-    let mut game = Pyxel(pocket_pyxel_gba::memory::in_iwram(|| alloc::boxed::Box::new(model)));
-    pocket_pyxel_gba::log!("model {} bytes", core::mem::size_of::<AppModel>());
-    pocket_pyxel_gba::run(&mut game)
+    let model = pocket_retro_gba::memory::in_iwram_up_to(512, 1536, AppModel::default);
+    let mut game = Model(pocket_retro_gba::memory::in_iwram(|| alloc::boxed::Box::new(model)));
+    pocket_retro_gba::log!("model {} bytes", core::mem::size_of::<AppModel>());
+    pocket_retro_gba::run(&mut game)
 }
 `;
   return { cargo, main };

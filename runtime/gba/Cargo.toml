@@ -1,9 +1,9 @@
 [package]
-name = "pocket-pyxel-gba"
+name = "pocket-retro-gba"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Game Boy Advance host for Pocket Pyxel games compiled by MicroTS"
+description = "Game Boy Advance host for Pocket Retro games compiled by MicroTS"
 
 [lib]
 test = false

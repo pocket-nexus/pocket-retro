@@ -1,7 +1,7 @@
-//! Game Boy Advance host for Pocket Pyxel.
+//! Game Boy Advance host for Pocket Retro.
 //!
 //! A game crate compiled by MicroTS implements [`Game`] and calls [`run`] from
-//! `pyxel_game_main`. The host owns the hardware: it boots the cartridge,
+//! `retro_game_main`. The host owns the hardware: it boots the cartridge,
 //! paces frames on VBlank, samples the keypad, presents the game's indexed
 //! frame buffer through Mode 4 and its palette, and reports measurements
 //! through the mGBA debug console.
@@ -53,7 +53,7 @@ pub fn vblanks() -> u32 {
 }
 
 #[no_mangle]
-extern "C" fn pyxel_irq_rust(flags: u32) {
+extern "C" fn retro_irq_rust(flags: u32) {
     if flags & hw::IRQ_VBLANK != 0 {
         unsafe { write_volatile(core::ptr::addr_of_mut!(VBLANKS), vblanks().wrapping_add(1)) };
         audio::vblank();
@@ -61,22 +61,22 @@ extern "C" fn pyxel_irq_rust(flags: u32) {
 }
 
 extern "C" {
-    fn pyxel_game_main() -> !;
-    fn pyxel_irq();
+    fn retro_game_main() -> !;
+    fn retro_irq();
 }
 
 #[no_mangle]
-unsafe extern "C" fn pyxel_main() -> ! {
+unsafe extern "C" fn retro_main() -> ! {
     memory::init_heap();
     hw::write16(hw::DISPCNT, hw::DISPCNT_FORCED_BLANK);
     // ROM wait states 3/1 with the prefetch buffer, as commercial cartridges use.
     hw::write16(hw::WAITCNT, 0x4317);
-    write_volatile(0x0300_7ffc as *mut usize, pyxel_irq as *const () as usize);
+    write_volatile(0x0300_7ffc as *mut usize, retro_irq as *const () as usize);
     hw::write16(hw::DISPSTAT, hw::DISPSTAT_VBLANK_IRQ);
     hw::write16(hw::IE, hw::IRQ_VBLANK as u16);
     hw::write16(hw::IME, 1);
     hw::start_cycle_counter();
-    pyxel_game_main()
+    retro_game_main()
 }
 
 /// Runs the game forever: one `frame` per 60 / fps VBlanks.

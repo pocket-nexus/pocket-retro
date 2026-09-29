@@ -1,6 +1,6 @@
-# Pocket Pyxel — agent instructions
+# Pocket Retro — agent instructions
 
-Pocket Pyxel runs [Pyxel](https://github.com/kitao/pyxel) games on a Game Boy
+Pocket Retro runs [Pyxel](https://github.com/kitao/pyxel) games on a Game Boy
 Advance. Games are ported from Python to TypeScript against the Pyxel SDK in
 `sdk/`, compiled to Rust by PocketJS **MicroTS** (compiled-model mode) and
 linked with the GBA host in `runtime/gba` into a bare-metal ROM. There is no

@@ -39,7 +39,7 @@ reset:
     ldr r2, =__iwram_bss_end
     bl boot_zero
     @ Enter Rust in system mode.
-    ldr r0, =pyxel_main
+    ldr r0, =retro_main
     bx r0
 
 boot_copy:
@@ -59,9 +59,9 @@ boot_zero:
 @ The BIOS saves r0-r3, r12 and lr, then calls this in ARM IRQ mode.
 .section .iwram.irq,"ax"
 .arm
-.global pyxel_irq
-.type pyxel_irq, %function
-pyxel_irq:
+.global retro_irq
+.type retro_irq, %function
+retro_irq:
     ldr r0, =0x04000200
     ldr r1, [r0]
     and r1, r1, r1, lsr #16
@@ -77,7 +77,7 @@ pyxel_irq:
     msr cpsr_c, r2
     stmfd sp!, {r0, lr}
     mov r0, r1
-    ldr r3, =pyxel_irq_rust
+    ldr r3, =retro_irq_rust
     mov lr, pc
     bx r3
     ldmfd sp!, {r0, lr}
@@ -107,7 +107,7 @@ memset:
     mov r1, r2
     mov r2, r3
     push {r0, lr}
-    bl pyxel_fill
+    bl retro_fill
     pop {r0, lr}
     bx lr
 
@@ -120,7 +120,7 @@ memset:
 __aeabi_memset:
 __aeabi_memset4:
 __aeabi_memset8:
-    b pyxel_fill
+    b retro_fill
 
 .global __aeabi_memclr
 .global __aeabi_memclr4
@@ -132,10 +132,10 @@ __aeabi_memclr:
 __aeabi_memclr4:
 __aeabi_memclr8:
     mov r2, #0
-    b pyxel_fill
+    b retro_fill
 
 @ r0 = destination, r1 = byte count, r2 = byte value
-pyxel_fill:
+retro_fill:
     and r2, r2, #0xff
     orr r2, r2, r2, lsl #8
     orr r2, r2, r2, lsl #16
@@ -181,7 +181,7 @@ fill_bytes:
 .type memcpy, %function
 memcpy:
     push {r0, lr}
-    bl pyxel_copy
+    bl retro_copy
     pop {r0, lr}
     bx lr
 
@@ -194,10 +194,10 @@ memcpy:
 __aeabi_memcpy:
 __aeabi_memcpy4:
 __aeabi_memcpy8:
-    b pyxel_copy
+    b retro_copy
 
 @ r0 = destination, r1 = source, r2 = byte count; copies forward.
-pyxel_copy:
+retro_copy:
     eor r3, r0, r1
     tst r3, #3
     bne copy_bytes
@@ -240,7 +240,7 @@ copy_bytes:
 .type memmove, %function
 memmove:
     push {r0, lr}
-    bl pyxel_move
+    bl retro_move
     pop {r0, lr}
     bx lr
 
@@ -253,15 +253,15 @@ memmove:
 __aeabi_memmove:
 __aeabi_memmove4:
 __aeabi_memmove8:
-    b pyxel_move
+    b retro_move
 
 @ Forward unless the destination starts inside the source.
-pyxel_move:
+retro_move:
     cmp r0, r1
-    bls pyxel_copy
+    bls retro_copy
     add r3, r1, r2
     cmp r0, r3
-    bhs pyxel_copy
+    bhs retro_copy
     add r0, r0, r2
     add r1, r1, r2
 move_back:

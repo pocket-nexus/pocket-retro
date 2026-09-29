@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "pocket-pyxel",
+      "name": "pocket-retro",
       "devDependencies": {
         "@types/bun": "^1.3.0",
         "lefthook": "^2.1.14",

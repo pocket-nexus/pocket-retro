@@ -1,5 +1,5 @@
 /**
- * The Pyxel API for Pocket Pyxel games: `import { cls, blt, btn } from "pyxel"`.
+ * The Pyxel API for Pocket Retro games: `import { cls, blt, btn } from "pyxel"`.
  *
  * Names follow Pyxel. Coordinates and colors are i32; convert float
  * positions with round(), which rounds as Pyxel does when it draws. Optional

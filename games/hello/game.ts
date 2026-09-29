@@ -18,6 +18,6 @@ export function draw(): void {
   circ(120, 30, 12, 8);
   line(0, 0, 159, 119, 7);
   tri(10, 110, 40, 80, 70, 110, 11);
-  text(5, 5, "HELLO POCKET PYXEL", 7);
+  text(5, 5, "HELLO POCKET RETRO", 7);
   for (let i = 0; i < 160; i++) pset(i, 100, 7);
 }

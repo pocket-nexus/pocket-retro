@@ -1,4 +1,4 @@
-# Pyxel API → Pocket Pyxel SDK
+# Pyxel API → Pocket Retro SDK
 
 Naming: module functions keep Pyxel's names in camelCase; methods of
 `pyxel.images[n]` become `img*(n, …)` and those of `pyxel.tilemaps[n]`

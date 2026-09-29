@@ -64,7 +64,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pocket-pyxel-gba"
+name = "pocket-retro-gba"
 version = "0.1.0"
 dependencies = [
  "critical-section",
@@ -97,11 +97,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "pyxel-game"
+name = "retro-game"
 version = "0.1.0"
 dependencies = [
  "microts",
- "pocket-pyxel-gba",
+ "pocket-retro-gba",
 ]
 
 [[package]]
