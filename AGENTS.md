@@ -17,6 +17,9 @@ JavaScript engine and no Python on the device.
 | `tools/`        | `build.ts` (game → ROM), `run.ts` (headless play, screenshots, WAV), `profile.ts` (cycle profile) |
 | `tools/lib/`    | `.pyxres`/`.pyxpal` reader, asset baker, ROM packer, IWRAM placement, PNG and zip codecs          |
 | `tools/emu/`    | Headless mGBA: `setup.ts` builds `libmgba` + `shim.c`, `mgba.ts` binds it                         |
+| `skills/`       | Agent skills; `port-pyxel-game` is the procedure for porting a game (`.claude/skills` links here) |
+
+To port a game, follow `skills/port-pyxel-game/SKILL.md`.
 
 Generated output: `build/<game>/` (baked assets, `gen/app_model.rs`, the game
 crate), `dist/<game>.gba` and `.elf`, `.cache/` (mGBA, cargo target).
