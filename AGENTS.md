@@ -29,8 +29,9 @@ crate), `dist/<game>.gba` and `.elf`, `.cache/` (mGBA, cargo target).
 
 - Bun, and `bun install` in this repository (installs the lefthook hooks).
 - PocketJS checkout at `../pocketjs` (override with `POCKETJS_ROOT`) on the
-  local branch `feat/microts-game-subset`, with `bun install` run there. The
-  branch carries the MicroTS extensions this project needs; it is not pushed.
+  branch `feat/microts-game-subset`, with `bun install` run there. The branch
+  carries the MicroTS extensions this project needs and is proposed upstream
+  as pocket-nexus/pocketjs#492.
 - Rust: `rustup toolchain install nightly-2026-07-01 --component rust-src`
   (`thumbv4t-none-eabi` is built with `-Z build-std=core,alloc`).
 - CMake, Ninja and a C compiler for the headless emulator (`bun run emu:setup`).
