@@ -1,38 +1,11 @@
 // Snake!, ported from pyxel/examples/07_snake.py (Marcus Croucher, MIT).
 // On the GBA, START restarts after a game over.
-import {
-  btn,
-  btnp,
-  cls,
-  FONT_HEIGHT,
-  FONT_WIDTH,
-  GAMEPAD1_BUTTON_DPAD_DOWN,
-  GAMEPAD1_BUTTON_DPAD_LEFT,
-  GAMEPAD1_BUTTON_DPAD_RIGHT,
-  GAMEPAD1_BUTTON_DPAD_UP,
-  GAMEPAD1_BUTTON_START,
-  init,
-  KEY_DOWN,
-  KEY_LEFT,
-  KEY_R,
-  KEY_RIGHT,
-  KEY_UP,
-  musicSet,
-  play,
-  playm,
-  pset,
-  rect,
-  rndi,
-  soundSet,
-  stop,
-  text,
-  zfill,
-} from "retro";
+import { system, screen, input, sound, music, math, text } from "retro";
 import { idiv, insert, len, pop, push, type i32 } from "@pocketjs/framework/solid/std";
 
 const SCREEN_W = 40;
 const SCREEN_H = 50;
-const SCORE_H = FONT_HEIGHT;
+const SCORE_H = text.fontHeight;
 
 interface Point {
   x: i32;
@@ -48,14 +21,14 @@ let death: boolean = false;
 let score: i32 = 0;
 
 export function setup(): void {
-  init(SCREEN_W, SCREEN_H, 20);
+  system.init(SCREEN_W, SCREEN_H, 20);
   initSound();
   reset();
 }
 
 function initSound(): void {
-  soundSet(0, "c3e3g3c4c4", "s", "4", "nnnnf", 7);
-  soundSet(1, "f3 b2 f2 b1  f1 f1 f1 f1", "p", "44444321", "nnnnnnnf", 9);
+  sound.set(0, "c3e3g3c4c4", "s", "4", "nnnnf", 7);
+  sound.set(1, "f3 b2 f2 b1  f1 f1 f1 f1", "p", "44444321", "nnnnnnnf", 9);
 
   const melody1 =
     "c3 c3 c3 d3 e3 r e3 r" +
@@ -75,16 +48,16 @@ function initSound(): void {
     "a2a2a2a2 c3c3c3c3 d3d3d3d3 e3e3e3e3" +
     "f3f3f3a3 a3a3a3a3 g3g3g3b3 b3b3b3b3" +
     "b3b3b3b4 rrrr e3d3c3g3 a2g2e2d2";
-  soundSet(2, melody1 + melody1 + melody2 + melody2, "s", "3", "nnnsffff", 20);
+  sound.set(2, melody1 + melody1 + melody2 + melody2, "s", "3", "nnnsffff", 20);
 
   const harmonyPart = "a1 a1 a1 b1  f1 f1 c2 c2  c2 c2 c2 c2  g1 g1 b1 b1";
   const harmony1 = harmonyPart + harmonyPart + harmonyPart + "f1 f1 f1 f1 f1 f1 f1 f1 g1 g1 g1 g1 g1 g1 g1 g1";
   const harmonyBar = repeat("f1", 8) + repeat("g1", 8) + repeat("a1", 8) + repeat("c2", 7) + "d2";
   const harmony2 = harmonyBar + harmonyBar + harmonyBar + repeat("f1", 16) + repeat("g1", 16);
-  soundSet(3, harmony1 + harmony1 + harmony2 + harmony2, "t", "5", "f", 20);
-  soundSet(4, "f0 r a4 r  f0 f0 a4 r  f0 r a4 r  f0 f0 a4 f0", "n", "6622 6622 6622 6426", "f", 20);
+  sound.set(3, harmony1 + harmony1 + harmony2 + harmony2, "t", "5", "f", 20);
+  sound.set(4, "f0 r a4 r  f0 f0 a4 r  f0 r a4 r  f0 f0 a4 f0", "n", "6622 6622 6622 6426", "f", 20);
 
-  musicSet(0, [], [2], [3], [4]);
+  music.set(0, [], [2], [3], [4]);
 }
 
 function repeat(s: string, count: i32): string {
@@ -100,11 +73,11 @@ function reset(): void {
   death = false;
   score = 0;
   generateApple();
-  playm(0, true);
+  music.play(0, true);
 }
 
 export function update(): void {
-  if (btnp(KEY_R) || btnp(GAMEPAD1_BUTTON_START)) reset();
+  if (input.btnp(input.key.r) || input.btnp(input.pad.start)) reset();
   if (!death) {
     updateDirection();
     updateSnake();
@@ -114,13 +87,13 @@ export function update(): void {
 }
 
 function updateDirection(): void {
-  if (btn(KEY_UP) || btn(GAMEPAD1_BUTTON_DPAD_UP)) {
+  if (input.btn(input.key.up) || input.btn(input.pad.up)) {
     if (!(dirX === 0 && dirY === 1)) setDirection(0, -1);
-  } else if (btn(KEY_DOWN) || btn(GAMEPAD1_BUTTON_DPAD_DOWN)) {
+  } else if (input.btn(input.key.down) || input.btn(input.pad.down)) {
     if (!(dirX === 0 && dirY === -1)) setDirection(0, 1);
-  } else if (btn(KEY_LEFT) || btn(GAMEPAD1_BUTTON_DPAD_LEFT)) {
+  } else if (input.btn(input.key.left) || input.btn(input.pad.left)) {
     if (!(dirX === 1 && dirY === 0)) setDirection(-1, 0);
-  } else if ((btn(KEY_RIGHT) || btn(GAMEPAD1_BUTTON_DPAD_RIGHT)) && !(dirX === -1 && dirY === 0)) {
+  } else if ((input.btn(input.key.right) || input.btn(input.pad.right)) && !(dirX === -1 && dirY === 0)) {
     setDirection(1, 0);
   }
 }
@@ -140,7 +113,7 @@ function checkApple(): void {
     score++;
     push(snake, popped);
     generateApple();
-    play(0, 0);
+    sound.play(0, 0);
   }
 }
 
@@ -151,7 +124,7 @@ function inSnake(x: i32, y: i32): boolean {
 
 function generateApple(): void {
   apple = { x: snake[0].x, y: snake[0].y };
-  while (inSnake(apple.x, apple.y)) apple = { x: rndi(0, SCREEN_W - 1), y: rndi(SCORE_H + 1, SCREEN_H - 1) };
+  while (inSnake(apple.x, apple.y)) apple = { x: math.rndi(0, SCREEN_W - 1), y: math.rndi(SCORE_H + 1, SCREEN_H - 1) };
 }
 
 function checkDeath(): void {
@@ -164,8 +137,8 @@ function checkDeath(): void {
 
 function die(): void {
   death = true;
-  stop();
-  play(0, 1);
+  sound.stop();
+  sound.play(0, 1);
 }
 
 export function draw(): void {
@@ -173,24 +146,24 @@ export function draw(): void {
     drawDeath();
     return;
   }
-  cls(3);
+  screen.cls(3);
 
   // Draw snake
-  for (let i = 0; i < len(snake); i++) pset(snake[i].x, snake[i].y, i === 0 ? 7 : 11);
+  for (let i = 0; i < len(snake); i++) screen.pset(snake[i].x, snake[i].y, i === 0 ? 7 : 11);
 
   // Draw apple
-  pset(apple.x, apple.y, 8);
+  screen.pset(apple.x, apple.y, 8);
 
   // Draw score
-  rect(0, 0, SCREEN_W, SCORE_H, 5);
-  text(1, 1, zfill(score, 4), 6);
+  screen.rect(0, 0, SCREEN_W, SCORE_H, 5);
+  screen.text(1, 1, text.zfill(score, 4), 6);
 }
 
 function drawDeath(): void {
-  cls(8);
-  const lines: string[] = ["GAME OVER", zfill(score, 4), "PRESS", "START"];
+  screen.cls(8);
+  const lines: string[] = ["GAME OVER", text.zfill(score, 4), "PRESS", "START"];
   for (let i = 0; i < len(lines); i++) {
-    const x = idiv(SCREEN_W - len(lines[i]) * FONT_WIDTH, 2);
-    text(x, 5 + (FONT_HEIGHT + 2) * i, lines[i], 0);
+    const x = idiv(SCREEN_W - len(lines[i]) * text.fontWidth, 2);
+    screen.text(x, 5 + (text.fontHeight + 2) * i, lines[i], 0);
   }
 }

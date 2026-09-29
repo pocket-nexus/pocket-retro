@@ -1,48 +1,6 @@
 // Pyxel Shooter, ported from pyxel/examples/09_shooter.py (Takashi Kitao, MIT).
 // On the GBA, START stands in for ENTER.
-import {
-  blt,
-  btn,
-  btnp,
-  circ,
-  circb,
-  clamp,
-  cls,
-  floordiv,
-  frameCount,
-  GAMEPAD1_BUTTON_A,
-  GAMEPAD1_BUTTON_DPAD_DOWN,
-  GAMEPAD1_BUTTON_DPAD_LEFT,
-  GAMEPAD1_BUTTON_DPAD_RIGHT,
-  GAMEPAD1_BUTTON_DPAD_UP,
-  GAMEPAD1_BUTTON_START,
-  GBA_START,
-  height,
-  imgSet,
-  init,
-  int,
-  KEY_DOWN,
-  KEY_LEFT,
-  KEY_RETURN,
-  KEY_RIGHT,
-  KEY_SPACE,
-  KEY_UP,
-  mapKey,
-  musicSet,
-  play,
-  playm,
-  pset,
-  rect,
-  rjust,
-  rndf,
-  rndi,
-  soundMml,
-  soundSet,
-  stop,
-  str,
-  text,
-  width,
-} from "retro";
+import { system, screen, image, input, sound, music, math, text } from "retro";
 import { f32, filter, len, push, type i32 } from "@pocketjs/framework/solid/std";
 
 const SCENE_TITLE = 0;
@@ -115,31 +73,35 @@ let bullets: Bullet[] = [];
 let blasts: Blast[] = [];
 
 export function setup(): void {
-  init(120, 160);
+  system.init(120, 160);
   // ENTER starts and restarts; keep it off A, which fires.
-  mapKey(KEY_RETURN, GBA_START);
+  input.map(input.key.enter, input.gba.start);
   initImage();
   initSound();
   scene = SCENE_TITLE;
   score = 0;
   for (let i = 0; i < NUM_STARS; i++)
-    push(stars, { x: rndi(0, width() - 1), y: rndi(0, height() - 1) * ONE, speed: int(rndf(1, 2.5) * f32(ONE)) });
-  playerX = floordiv(width(), 2);
-  playerY = height() - 20;
-  playm(0, true);
+    push(stars, {
+      x: math.rndi(0, system.width() - 1),
+      y: math.rndi(0, system.height() - 1) * ONE,
+      speed: math.int(math.rndf(1, 2.5) * f32(ONE)),
+    });
+  playerX = math.floordiv(system.width(), 2);
+  playerY = system.height() - 20;
+  music.play(0, true);
 }
 
 function initImage(): void {
   // Create the player sprite
-  imgSet(0, 0, 0, ["00c00c00", "0c7007c0", "0c7007c0", "c703b07c", "77033077", "785cc587", "85c77c58", "0c0880c0"]);
+  image.set(0, 0, 0, ["00c00c00", "0c7007c0", "0c7007c0", "c703b07c", "77033077", "785cc587", "85c77c58", "0c0880c0"]);
   // Create the enemy sprite
-  imgSet(0, 8, 0, ["00088000", "00ee1200", "08e2b180", "02882820", "00222200", "00012280", "08208008", "80008000"]);
+  image.set(0, 8, 0, ["00088000", "00ee1200", "08e2b180", "02882820", "00222200", "00012280", "08208008", "80008000"]);
 }
 
 function initSound(): void {
   // Define sound effects
-  soundSet(0, "a3a2c1a1", "p", "7", "s", 5);
-  soundSet(1, "a3a2c2c2", "n", "7742", "s", 10);
+  sound.set(0, "a3a2c1a1", "p", "7", "s", 5);
+  sound.set(1, "a3a2c2c2", "n", "7742", "s", 10);
 
   // Define title music
   let a1 = "T128 Q96 @2 @ENV1{127,6,96} O4 L16 @VIB1{36,18,25} K-2";
@@ -152,10 +114,10 @@ function initSound(): void {
   let c1 = "T128 Q50 @3 L16 @ENV1{48,8,0} @ENV2{127,6,0}";
   let c2 = "[@ENV1 O7 FFR4 FFR4 @ENV2 O3 G4]3 @ENV1 O7 FFR4 FFR4 FF @ENV2 O3 G8";
 
-  soundMml(2, a1 + a2 + a3);
-  soundMml(3, b1 + b2);
-  soundMml(4, c1 + c2);
-  musicSet(0, [2], [3], [4]);
+  sound.mml(2, a1 + a2 + a3);
+  sound.mml(3, b1 + b2);
+  sound.mml(4, c1 + c2);
+  music.set(0, [2], [3], [4]);
 
   // Define gameplay music
   a1 = "T150 Q96 @1 @ENV1{127,12,64} O4 L16";
@@ -171,10 +133,10 @@ function initSound(): void {
   const c3 = "Q80 <F8FF>F<F8 F+8RF+8>F+<F+8.>";
   const c4 = "Q80 @GLI0 <F8FF>F<F8F+8RF+8>F+<F+8 Q100 G8R>DG<[G.R32>DG<]2 @GLI1 Q50 >>CC<F8>";
 
-  soundMml(5, a1 + a2 + a3 + a2 + a4);
-  soundMml(6, b1 + b2 + b3 + b2 + b4);
-  soundMml(7, c1 + c2 + c3 + c2 + c4);
-  musicSet(1, [5], [6], [7]);
+  sound.mml(5, a1 + a2 + a3 + a2 + a4);
+  sound.mml(6, b1 + b2 + b3 + b2 + b4);
+  sound.mml(7, c1 + c2 + c3 + c2 + c4);
+  music.set(1, [5], [6], [7]);
 }
 
 // ---- Update ----------------------------------------------------------------
@@ -189,14 +151,14 @@ export function update(): void {
 function updateBackground(): void {
   for (let i = 0; i < len(stars); i++) {
     stars[i].y += stars[i].speed;
-    if (stars[i].y >= height() * ONE) stars[i].y -= height() * ONE;
+    if (stars[i].y >= system.height() * ONE) stars[i].y -= system.height() * ONE;
   }
 }
 
 function updateTitleScene(): void {
-  if (btnp(KEY_RETURN) || btnp(GAMEPAD1_BUTTON_START)) {
+  if (input.btnp(input.key.enter) || input.btnp(input.pad.start)) {
     scene = SCENE_PLAY;
-    playm(1, true);
+    music.play(1, true);
   }
 }
 
@@ -211,12 +173,12 @@ function half(v: i32): i32 {
 }
 
 function updatePlayScene(): void {
-  if (frameCount() % 6 === 0)
+  if (system.frameCount() % 6 === 0)
     push(enemies, {
-      x: rndi(0, width() - ENEMY_WIDTH) * 2,
+      x: math.rndi(0, system.width() - ENEMY_WIDTH) * 2,
       y: 0,
       direction: 1,
-      timerOffset: rndi(0, 59),
+      timerOffset: math.rndi(0, 59),
       isAlive: true,
     });
 
@@ -234,7 +196,7 @@ function updatePlayScene(): void {
         enemies[e].isAlive = false;
         bullets[b].isAlive = false;
         spawnBlast(enemies[e].x + ENEMY_WIDTH, enemies[e].y + ENEMY_HEIGHT);
-        play(2, 1, false, true);
+        sound.play(2, 1, false, true);
         score += 10;
       }
     }
@@ -252,8 +214,8 @@ function updatePlayScene(): void {
     ) {
       enemies[e].isAlive = false;
       spawnBlast(px + PLAYER_WIDTH, py + PLAYER_HEIGHT);
-      stop();
-      play(3, 1);
+      sound.stop();
+      sound.play(3, 1);
       scene = SCENE_GAMEOVER;
     }
   }
@@ -263,21 +225,21 @@ function updatePlayScene(): void {
 }
 
 function updatePlayer(): void {
-  if (btn(KEY_LEFT) || btn(GAMEPAD1_BUTTON_DPAD_LEFT)) playerX -= PLAYER_SPEED;
-  if (btn(KEY_RIGHT) || btn(GAMEPAD1_BUTTON_DPAD_RIGHT)) playerX += PLAYER_SPEED;
-  if (btn(KEY_UP) || btn(GAMEPAD1_BUTTON_DPAD_UP)) playerY -= PLAYER_SPEED;
-  if (btn(KEY_DOWN) || btn(GAMEPAD1_BUTTON_DPAD_DOWN)) playerY += PLAYER_SPEED;
+  if (input.btn(input.key.left) || input.btn(input.pad.left)) playerX -= PLAYER_SPEED;
+  if (input.btn(input.key.right) || input.btn(input.pad.right)) playerX += PLAYER_SPEED;
+  if (input.btn(input.key.up) || input.btn(input.pad.up)) playerY -= PLAYER_SPEED;
+  if (input.btn(input.key.down) || input.btn(input.pad.down)) playerY += PLAYER_SPEED;
 
-  playerX = clamp(playerX, 0, width() - PLAYER_WIDTH);
-  playerY = clamp(playerY, 0, height() - PLAYER_HEIGHT);
+  playerX = math.clamp(playerX, 0, system.width() - PLAYER_WIDTH);
+  playerY = math.clamp(playerY, 0, system.height() - PLAYER_HEIGHT);
 
-  if (btnp(KEY_SPACE) || btnp(GAMEPAD1_BUTTON_A)) {
+  if (input.btnp(input.key.space) || input.btnp(input.pad.a)) {
     push(bullets, {
-      x: playerX + floordiv(PLAYER_WIDTH - BULLET_WIDTH, 2),
-      y: playerY - floordiv(BULLET_HEIGHT, 2),
+      x: playerX + math.floordiv(PLAYER_WIDTH - BULLET_WIDTH, 2),
+      y: playerY - math.floordiv(BULLET_HEIGHT, 2),
       isAlive: true,
     });
-    play(3, 0);
+    sound.play(3, 0);
   }
 }
 
@@ -288,7 +250,7 @@ function updateEntities(): void {
     if (bullets[i].y + BULLET_HEIGHT - 1 < 0) bullets[i].isAlive = false;
   }
   for (let i = 0; i < len(enemies); i++) {
-    if ((frameCount() + enemies[i].timerOffset) % 60 < 30) {
+    if ((system.frameCount() + enemies[i].timerOffset) % 60 < 30) {
       enemies[i].x += ENEMY_SPEED_HALVES;
       enemies[i].direction = 1;
     } else {
@@ -296,7 +258,7 @@ function updateEntities(): void {
       enemies[i].direction = -1;
     }
     enemies[i].y += ENEMY_SPEED_HALVES;
-    if (enemies[i].y > (height() - 1) * 2) enemies[i].isAlive = false;
+    if (enemies[i].y > (system.height() - 1) * 2) enemies[i].isAlive = false;
   }
   for (let i = 0; i < len(blasts); i++) {
     blasts[i].radius += 1;
@@ -309,54 +271,54 @@ function updateEntities(): void {
 
 function updateGameoverScene(): void {
   updateEntities();
-  if (btnp(KEY_RETURN) || btnp(GAMEPAD1_BUTTON_START)) {
+  if (input.btnp(input.key.enter) || input.btnp(input.pad.start)) {
     scene = SCENE_PLAY;
-    playerX = floordiv(width(), 2);
-    playerY = height() - 20;
+    playerX = math.floordiv(system.width(), 2);
+    playerY = system.height() - 20;
     score = 0;
     enemies = [];
     bullets = [];
     blasts = [];
-    playm(1, true);
+    music.play(1, true);
   }
 }
 
 // ---- Draw ------------------------------------------------------------------
 
 export function draw(): void {
-  cls(0);
+  screen.cls(0);
   for (const star of stars)
-    pset(star.x, (star.y + (ONE >> 1)) >> 16, star.speed > STAR_FAST ? STAR_COLOR_HIGH : STAR_COLOR_LOW);
+    screen.pset(star.x, (star.y + (ONE >> 1)) >> 16, star.speed > STAR_FAST ? STAR_COLOR_HIGH : STAR_COLOR_LOW);
 
   if (scene === SCENE_TITLE) drawTitleScene();
   else if (scene === SCENE_PLAY) drawPlayScene();
   else if (scene === SCENE_GAMEOVER) drawGameoverScene();
 
-  text(39, 4, "SCORE " + rjust(str(score), 5), 7);
+  screen.text(39, 4, "SCORE " + text.rjust(text.str(score), 5), 7);
 }
 
 function drawTitleScene(): void {
-  text(35, 66, "Pyxel Shooter", frameCount() % 16);
-  text(31, 126, "- PRESS START -", 13);
+  screen.text(35, 66, "Pyxel Shooter", system.frameCount() % 16);
+  screen.text(31, 126, "- PRESS START -", 13);
 }
 
 function drawEntities(): void {
-  for (const bullet of bullets) rect(bullet.x, bullet.y, BULLET_WIDTH, BULLET_HEIGHT, BULLET_COLOR);
+  for (const bullet of bullets) screen.rect(bullet.x, bullet.y, BULLET_WIDTH, BULLET_HEIGHT, BULLET_COLOR);
   for (const enemy of enemies)
-    blt(half(enemy.x), half(enemy.y), 0, 8, 0, ENEMY_WIDTH * enemy.direction, ENEMY_HEIGHT, 0);
+    screen.blt(half(enemy.x), half(enemy.y), 0, 8, 0, ENEMY_WIDTH * enemy.direction, ENEMY_HEIGHT, 0);
   for (const blast of blasts) {
-    circ(half(blast.x), half(blast.y), blast.radius, BLAST_COLOR_IN);
-    circb(half(blast.x), half(blast.y), blast.radius, BLAST_COLOR_OUT);
+    screen.circ(half(blast.x), half(blast.y), blast.radius, BLAST_COLOR_IN);
+    screen.circb(half(blast.x), half(blast.y), blast.radius, BLAST_COLOR_OUT);
   }
 }
 
 function drawPlayScene(): void {
-  blt(playerX, playerY, 0, 0, 0, PLAYER_WIDTH, PLAYER_HEIGHT, 0);
+  screen.blt(playerX, playerY, 0, 0, 0, PLAYER_WIDTH, PLAYER_HEIGHT, 0);
   drawEntities();
 }
 
 function drawGameoverScene(): void {
   drawEntities();
-  text(43, 66, "GAME OVER", 8);
-  text(31, 126, "- PRESS START -", 13);
+  screen.text(43, 66, "GAME OVER", 8);
+  screen.text(31, 126, "- PRESS START -", 13);
 }

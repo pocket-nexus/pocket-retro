@@ -1,36 +1,5 @@
 // Pyxel Platformer, ported from pyxel/examples/10_platformer.py (Takashi Kitao, MIT).
-import {
-  blt,
-  bltm,
-  btn,
-  btnp,
-  camera,
-  ceil,
-  cls,
-  collide,
-  floor,
-  floordiv,
-  frameCount,
-  GAMEPAD1_BUTTON_A,
-  GAMEPAD1_BUTTON_DPAD_LEFT,
-  GAMEPAD1_BUTTON_DPAD_RIGHT,
-  height,
-  imgRect,
-  init,
-  int,
-  KEY_LEFT,
-  KEY_RIGHT,
-  KEY_SPACE,
-  mod,
-  play,
-  playm,
-  round,
-  sqrt,
-  tget,
-  tile,
-  tileX,
-  walls,
-} from "retro";
+import { system, screen, image, tilemap, input, sound, music, math } from "retro";
 import { abs, f32, filter, len, push, type f32 as F32, type i32 } from "@pocketjs/framework/solid/std";
 
 const TRANSPARENT_COLOR = 2;
@@ -71,20 +40,20 @@ let wallTiles: i32 = 0;
 let wallTilesWithFloor: i32 = 0;
 
 function tileFloor(): i32 {
-  return tile(1, 0);
+  return tilemap.tile(1, 0);
 }
 
 function getTile(tileX: i32, tileY: i32): i32 {
-  return tget(0, tileX, tileY);
+  return tilemap.pget(0, tileX, tileY);
 }
 
 function isWall(x: i32, y: i32): boolean {
-  const t = getTile(floordiv(x, 8), floordiv(y, 8));
-  return t === tileFloor() || tileX(t) >= WALL_TILE_X;
+  const t = getTile(math.floordiv(x, 8), math.floordiv(y, 8));
+  return t === tileFloor() || tilemap.tileX(t) >= WALL_TILE_X;
 }
 
 function pushBack(x: i32, y: i32, dx: i32, dy: i32): { x: i32; y: i32 } {
-  const d = collide(0, x, y, 8, 8, dx, dy, dy > 0 ? wallTilesWithFloor : wallTiles);
+  const d = tilemap.collide(0, x, y, 8, 8, dx, dy, dy > 0 ? wallTilesWithFloor : wallTiles);
   return { x: x + d.dx, y: y + d.dy };
 }
 
@@ -106,20 +75,20 @@ function enemy(kind: i32, x: i32, y: i32, direction: i32): Enemy {
 }
 
 export function setup(): void {
-  init(128, 128);
+  system.init(128, 128);
 
   // Wall tiles: every tile with u >= 4; the floor tile only blocks falls.
   const wallList: i32[] = [];
-  for (let u = WALL_TILE_X; u < 32; u++) for (let v = 0; v < 32; v++) push(wallList, tile(u, v));
-  wallTiles = walls(wallList);
+  for (let u = WALL_TILE_X; u < 32; u++) for (let v = 0; v < 32; v++) push(wallList, tilemap.tile(u, v));
+  wallTiles = tilemap.walls(wallList);
   push(wallList, tileFloor());
-  wallTilesWithFloor = walls(wallList);
+  wallTilesWithFloor = tilemap.walls(wallList);
 
   // Make enemy spawn tiles invisible
-  imgRect(0, 0, 8, 24, 8, TRANSPARENT_COLOR);
+  image.rect(0, 0, 8, 24, 8, TRANSPARENT_COLOR);
 
   spawnEnemy(0, 127);
-  playm(0, true);
+  music.play(0, true);
 }
 
 export function update(): void {
@@ -137,23 +106,23 @@ export function update(): void {
 
 function updatePlayer(): void {
   const lastY = playerY;
-  if (btn(KEY_LEFT) || btn(GAMEPAD1_BUTTON_DPAD_LEFT)) {
+  if (input.btn(input.key.left) || input.btn(input.pad.left)) {
     playerDx = -2;
     playerDirection = -1;
   }
-  if (btn(KEY_RIGHT) || btn(GAMEPAD1_BUTTON_DPAD_RIGHT)) {
+  if (input.btn(input.key.right) || input.btn(input.pad.right)) {
     playerDx = 2;
     playerDirection = 1;
   }
   playerDy = playerDy + 1 < 3 ? playerDy + 1 : 3;
-  if (btnp(KEY_SPACE) || btnp(GAMEPAD1_BUTTON_A)) {
+  if (input.btnp(input.key.space) || input.btnp(input.pad.a)) {
     playerDy = -6;
-    play(3, 8);
+    sound.play(3, 8);
   }
   const moved = pushBack(playerX, playerY, playerDx, playerDy);
   playerX = moved.x > scrollX ? moved.x : scrollX;
   playerY = moved.y > 0 ? moved.y : 0;
-  playerDx = int(f32(playerDx) * f32(0.8));
+  playerDx = math.int(f32(playerDx) * f32(0.8));
   playerFalling = playerY > lastY;
 
   if (playerX > scrollX + SCROLL_BORDER_X) {
@@ -161,7 +130,7 @@ function updatePlayer(): void {
     scrollX = playerX - SCROLL_BORDER_X < 240 * 8 ? playerX - SCROLL_BORDER_X : 240 * 8;
     spawnEnemy(lastScrollX + 128, scrollX + 127);
   }
-  if (playerY >= height()) gameOver();
+  if (playerY >= system.height()) gameOver();
 }
 
 function updateEnemy(i: i32): void {
@@ -189,7 +158,7 @@ function updateEnemy(i: i32): void {
         dy = playerY - y;
       const sqDist = dx * dx + dy * dy;
       if (sqDist < 60 * 60) {
-        const dist = sqrt(f32(sqDist));
+        const dist = math.sqrt(f32(sqDist));
         const bullet = enemy(BULLET, x, y, 0);
         bullet.fdx = f32(dx) / dist;
         bullet.fdy = f32(dy) / dist;
@@ -200,8 +169,8 @@ function updateEnemy(i: i32): void {
   } else {
     enemies[i].fx += enemies[i].fdx;
     enemies[i].fy += enemies[i].fdy;
-    enemies[i].x = round(enemies[i].fx);
-    enemies[i].y = round(enemies[i].fy);
+    enemies[i].x = math.round(enemies[i].fx);
+    enemies[i].y = math.round(enemies[i].fy);
   }
 }
 
@@ -212,14 +181,14 @@ function moveEnemy(i: i32): void {
 }
 
 function spawnEnemy(leftX: i32, rightX: i32): void {
-  const left = ceil(f32(leftX) / f32(8)),
-    right = floor(f32(rightX) / f32(8));
+  const left = math.ceil(f32(leftX) / f32(8)),
+    right = math.floor(f32(rightX) / f32(8));
   for (let x = left; x <= right; x++) {
     for (let y = 0; y < 16; y++) {
       const t = getTile(x, y);
-      if (t === tile(0, 1)) push(enemies, enemy(ENEMY1, x * 8, y * 8, -1));
-      else if (t === tile(1, 1)) push(enemies, enemy(ENEMY2, x * 8, y * 8, 1));
-      else if (t === tile(2, 1)) push(enemies, enemy(ENEMY3, x * 8, y * 8, 0));
+      if (t === tilemap.tile(0, 1)) push(enemies, enemy(ENEMY1, x * 8, y * 8, -1));
+      else if (t === tilemap.tile(1, 1)) push(enemies, enemy(ENEMY2, x * 8, y * 8, 1));
+      else if (t === tilemap.tile(2, 1)) push(enemies, enemy(ENEMY3, x * 8, y * 8, 0));
     }
   }
 }
@@ -232,30 +201,48 @@ function gameOver(): void {
   playerDy = 0;
   enemies = [];
   spawnEnemy(0, 127);
-  play(3, 9);
+  sound.play(3, 9);
 }
 
 export function draw(): void {
-  cls(0);
+  screen.cls(0);
 
   // Draw level
-  camera();
-  bltm(0, 0, 0, mod(floordiv(scrollX, 4), 128), 128, 128, 128);
-  bltm(0, 0, 0, scrollX, 0, 128, 128, TRANSPARENT_COLOR);
+  screen.camera();
+  screen.bltm(0, 0, 0, math.mod(math.floordiv(scrollX, 4), 128), 128, 128, 128);
+  screen.bltm(0, 0, 0, scrollX, 0, 128, 128, TRANSPARENT_COLOR);
 
   // Draw characters
-  camera(scrollX, 0);
-  const u = (playerFalling ? 2 : mod(floordiv(frameCount(), 3), 2)) * 8;
-  blt(playerX, playerY, 0, u, 16, playerDirection > 0 ? 8 : -8, 8, TRANSPARENT_COLOR);
+  screen.camera(scrollX, 0);
+  const u = (playerFalling ? 2 : math.mod(math.floordiv(system.frameCount(), 3), 2)) * 8;
+  screen.blt(playerX, playerY, 0, u, 16, playerDirection > 0 ? 8 : -8, 8, TRANSPARENT_COLOR);
   for (const e of enemies) {
     if (e.kind === ENEMY1) {
-      blt(e.x, e.y, 0, mod(floordiv(frameCount(), 4), 2) * 8, 24, e.direction > 0 ? 8 : -8, 8, TRANSPARENT_COLOR);
+      screen.blt(
+        e.x,
+        e.y,
+        0,
+        math.mod(math.floordiv(system.frameCount(), 4), 2) * 8,
+        24,
+        e.direction > 0 ? 8 : -8,
+        8,
+        TRANSPARENT_COLOR,
+      );
     } else if (e.kind === ENEMY2) {
-      blt(e.x, e.y, 0, mod(floordiv(frameCount(), 4), 2) * 8 + 16, 24, e.direction > 0 ? 8 : -8, 8, TRANSPARENT_COLOR);
+      screen.blt(
+        e.x,
+        e.y,
+        0,
+        math.mod(math.floordiv(system.frameCount(), 4), 2) * 8 + 16,
+        24,
+        e.direction > 0 ? 8 : -8,
+        8,
+        TRANSPARENT_COLOR,
+      );
     } else if (e.kind === ENEMY3) {
-      blt(e.x, e.y, 0, mod(floordiv(frameCount(), 8), 2) * 8, 32, 8, 8, TRANSPARENT_COLOR);
+      screen.blt(e.x, e.y, 0, math.mod(math.floordiv(system.frameCount(), 8), 2) * 8, 32, 8, 8, TRANSPARENT_COLOR);
     } else {
-      blt(e.x, e.y, 0, mod(floordiv(frameCount(), 2), 2) * 8 + 16, 32, 8, 8, TRANSPARENT_COLOR);
+      screen.blt(e.x, e.y, 0, math.mod(math.floordiv(system.frameCount(), 2), 2) * 8 + 16, 32, 8, 8, TRANSPARENT_COLOR);
     }
   }
 }

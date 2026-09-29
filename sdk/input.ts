@@ -4,6 +4,8 @@
  * mapKey() changes a mapping, for example to put KEY_X on the B button.
  */
 import { fill, i32, u16, type i32 as I32, type u16 as U16 } from "@pocketjs/framework/solid/std";
+import * as key from "./api/key";
+import * as pad from "./api/pad";
 
 // KEYINPUT bits, as the host passes them.
 export const GBA_A: I32 = 1;
@@ -17,7 +19,7 @@ export const GBA_DOWN: I32 = 128;
 export const GBA_R: I32 = 256;
 export const GBA_L: I32 = 512;
 
-/** Number of key ids; retro.ts numbers its KEY_* and GAMEPAD* constants below this. */
+/** Number of key ids; sdk/api/key.ts, pad.ts and mouse.ts number theirs below this. */
 export const KEY_COUNT: I32 = 128;
 
 let buttons: I32 = 0;
@@ -72,4 +74,35 @@ export function btnr(key: I32): boolean {
 
 export function rawButtons(): I32 {
   return buttons;
+}
+
+/** The default key map: the D-pad, WASD and arrows move; Z, Space and Enter act. */
+export function mapDefaultKeys(): void {
+  mapKey(key.up, GBA_UP);
+  mapKey(key.w, GBA_UP);
+  mapKey(pad.up, GBA_UP);
+  mapKey(key.down, GBA_DOWN);
+  mapKey(key.s, GBA_DOWN);
+  mapKey(pad.down, GBA_DOWN);
+  mapKey(key.left, GBA_LEFT);
+  mapKey(key.a, GBA_LEFT);
+  mapKey(pad.left, GBA_LEFT);
+  mapKey(key.right, GBA_RIGHT);
+  mapKey(key.d, GBA_RIGHT);
+  mapKey(pad.right, GBA_RIGHT);
+  mapKey(key.z, GBA_A);
+  mapKey(key.space, GBA_A);
+  mapKey(key.kpEnter, GBA_A);
+  mapKey(pad.a, GBA_A);
+  mapKey(key.x, GBA_B);
+  mapKey(key.backspace, GBA_B);
+  mapKey(pad.b, GBA_B);
+  mapKey(key.enter, GBA_START | GBA_A);
+  mapKey(pad.start, GBA_START);
+  mapKey(key.tab, GBA_SELECT);
+  mapKey(pad.back, GBA_SELECT);
+  mapKey(pad.x, GBA_L);
+  mapKey(pad.leftShoulder, GBA_L);
+  mapKey(pad.y, GBA_R);
+  mapKey(pad.rightShoulder, GBA_R);
 }
