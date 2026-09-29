@@ -6,9 +6,9 @@ import { len, type i32 as I32 } from "@pocketjs/framework/solid/std";
 import { textWidth } from "../gfx";
 
 /** Width of a character of the built-in font (FONT_WIDTH). */
-export const fontWidth: I32 = 4;
+export const FONT_WIDTH: I32 = 4;
 /** Height of a character of the built-in font (FONT_HEIGHT). */
-export const fontHeight: I32 = 6;
+export const FONT_HEIGHT: I32 = 6;
 
 /** Width in pixels of the widest line of `s` in the built-in font. */
 export function width(s: string): I32 {

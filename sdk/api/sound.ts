@@ -19,9 +19,9 @@ export * as tone from "./tone";
 export * as effect from "./effect";
 
 /** Channels (NUM_CHANNELS). */
-export const channels: I32 = NUM_CHANNELS;
+export const CHANNELS: I32 = NUM_CHANNELS;
 /** Sounds (NUM_SOUNDS). */
-export const count: I32 = NUM_SOUNDS;
+export const COUNT: I32 = NUM_SOUNDS;
 
 /** pyxel.sounds[snd].set(notes, tones, volumes, effects, speed). */
 export function set(snd: I32, notes: string, tones: string, volumes: string, effects: string, speed: I32): void {

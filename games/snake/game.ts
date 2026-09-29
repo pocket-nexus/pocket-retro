@@ -5,7 +5,7 @@ import { idiv, insert, len, pop, push, type i32 } from "@pocketjs/framework/soli
 
 const SCREEN_W = 40;
 const SCREEN_H = 50;
-const SCORE_H = text.fontHeight;
+const SCORE_H = text.FONT_HEIGHT;
 
 interface Point {
   x: i32;
@@ -77,7 +77,7 @@ function reset(): void {
 }
 
 export function update(): void {
-  if (input.btnp(input.key.r) || input.btnp(input.pad.start)) reset();
+  if (input.btnp(input.key.R) || input.btnp(input.pad.START)) reset();
   if (!death) {
     updateDirection();
     updateSnake();
@@ -87,13 +87,13 @@ export function update(): void {
 }
 
 function updateDirection(): void {
-  if (input.btn(input.key.up) || input.btn(input.pad.up)) {
+  if (input.btn(input.key.UP) || input.btn(input.pad.DPAD_UP)) {
     if (!(dirX === 0 && dirY === 1)) setDirection(0, -1);
-  } else if (input.btn(input.key.down) || input.btn(input.pad.down)) {
+  } else if (input.btn(input.key.DOWN) || input.btn(input.pad.DPAD_DOWN)) {
     if (!(dirX === 0 && dirY === -1)) setDirection(0, 1);
-  } else if (input.btn(input.key.left) || input.btn(input.pad.left)) {
+  } else if (input.btn(input.key.LEFT) || input.btn(input.pad.DPAD_LEFT)) {
     if (!(dirX === 1 && dirY === 0)) setDirection(-1, 0);
-  } else if ((input.btn(input.key.right) || input.btn(input.pad.right)) && !(dirX === -1 && dirY === 0)) {
+  } else if ((input.btn(input.key.RIGHT) || input.btn(input.pad.DPAD_RIGHT)) && !(dirX === -1 && dirY === 0)) {
     setDirection(1, 0);
   }
 }
@@ -163,7 +163,7 @@ function drawDeath(): void {
   screen.cls(8);
   const lines: string[] = ["GAME OVER", text.zfill(score, 4), "PRESS", "START"];
   for (let i = 0; i < len(lines); i++) {
-    const x = idiv(SCREEN_W - len(lines[i]) * text.fontWidth, 2);
-    screen.text(x, 5 + (text.fontHeight + 2) * i, lines[i], 0);
+    const x = idiv(SCREEN_W - len(lines[i]) * text.FONT_WIDTH, 2);
+    screen.text(x, 5 + (text.FONT_HEIGHT + 2) * i, lines[i], 0);
   }
 }

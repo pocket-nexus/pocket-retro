@@ -42,8 +42,8 @@ export function update(): void {
 }
 
 function updatePlayer(): void {
-  if (input.btn(input.key.left) || input.btn(input.pad.left)) playerX = playerX - 2 > 0 ? playerX - 2 : 0;
-  if (input.btn(input.key.right) || input.btn(input.pad.right))
+  if (input.btn(input.key.LEFT) || input.btn(input.pad.DPAD_LEFT)) playerX = playerX - 2 > 0 ? playerX - 2 : 0;
+  if (input.btn(input.key.RIGHT) || input.btn(input.pad.DPAD_RIGHT))
     playerX = playerX + 2 < system.width() - 16 ? playerX + 2 : system.width() - 16;
   playerY += playerDy;
   playerDy = playerDy + 1 < 8 ? playerDy + 1 : 8;

@@ -1,6 +1,6 @@
 /**
  * Drawing on the screen (pyxel.cls, pset, blt, text, pal, clip, ...) and
- * its display colors (pyxel.colors): `screen.cls(color.navy)`.
+ * its display colors (pyxel.colors): `screen.cls(color.NAVY)`.
  */
 import { f32, len, type f32 as F32, type i32 as I32 } from "@pocketjs/framework/solid/std";
 import {
@@ -85,7 +85,7 @@ export function fill(x: I32, y: I32, col: I32): void {
 }
 
 /**
- * Draws the w x h region at (u, v) of image bank `img` (or image.screen) at
+ * Draws the w x h region at (u, v) of image bank `img` (or image.SCREEN) at
  * (x, y). Negative w or h flips; colkey -1 draws every pixel. rotate is in
  * degrees clockwise and scale is a factor, both about the region's center.
  */

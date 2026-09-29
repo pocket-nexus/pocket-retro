@@ -75,7 +75,7 @@ let blasts: Blast[] = [];
 export function setup(): void {
   system.init(120, 160);
   // ENTER starts and restarts; keep it off A, which fires.
-  input.map(input.key.enter, input.gba.start);
+  input.map(input.key.RETURN, input.gba.START);
   initImage();
   initSound();
   scene = SCENE_TITLE;
@@ -156,7 +156,7 @@ function updateBackground(): void {
 }
 
 function updateTitleScene(): void {
-  if (input.btnp(input.key.enter) || input.btnp(input.pad.start)) {
+  if (input.btnp(input.key.RETURN) || input.btnp(input.pad.START)) {
     scene = SCENE_PLAY;
     music.play(1, true);
   }
@@ -225,15 +225,15 @@ function updatePlayScene(): void {
 }
 
 function updatePlayer(): void {
-  if (input.btn(input.key.left) || input.btn(input.pad.left)) playerX -= PLAYER_SPEED;
-  if (input.btn(input.key.right) || input.btn(input.pad.right)) playerX += PLAYER_SPEED;
-  if (input.btn(input.key.up) || input.btn(input.pad.up)) playerY -= PLAYER_SPEED;
-  if (input.btn(input.key.down) || input.btn(input.pad.down)) playerY += PLAYER_SPEED;
+  if (input.btn(input.key.LEFT) || input.btn(input.pad.DPAD_LEFT)) playerX -= PLAYER_SPEED;
+  if (input.btn(input.key.RIGHT) || input.btn(input.pad.DPAD_RIGHT)) playerX += PLAYER_SPEED;
+  if (input.btn(input.key.UP) || input.btn(input.pad.DPAD_UP)) playerY -= PLAYER_SPEED;
+  if (input.btn(input.key.DOWN) || input.btn(input.pad.DPAD_DOWN)) playerY += PLAYER_SPEED;
 
   playerX = math.clamp(playerX, 0, system.width() - PLAYER_WIDTH);
   playerY = math.clamp(playerY, 0, system.height() - PLAYER_HEIGHT);
 
-  if (input.btnp(input.key.space) || input.btnp(input.pad.a)) {
+  if (input.btnp(input.key.SPACE) || input.btnp(input.pad.A)) {
     push(bullets, {
       x: playerX + math.floordiv(PLAYER_WIDTH - BULLET_WIDTH, 2),
       y: playerY - math.floordiv(BULLET_HEIGHT, 2),
@@ -271,7 +271,7 @@ function updateEntities(): void {
 
 function updateGameoverScene(): void {
   updateEntities();
-  if (input.btnp(input.key.enter) || input.btnp(input.pad.start)) {
+  if (input.btnp(input.key.RETURN) || input.btnp(input.pad.START)) {
     scene = SCENE_PLAY;
     playerX = math.floordiv(system.width(), 2);
     playerY = system.height() - 20;

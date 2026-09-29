@@ -1,5 +1,5 @@
 /**
- * Buttons (pyxel.btn, btnp, btnr): `input.btn(input.key.left)`. Keys, gamepad
+ * Buttons (pyxel.btn, btnp, btnr): `input.btn(input.key.LEFT)`. Keys, gamepad
  * and mouse buttons map to GBA buttons; input.map() changes a mapping.
  */
 import type { i32 as I32 } from "@pocketjs/framework/solid/std";

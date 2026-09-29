@@ -8,8 +8,8 @@ export function setup(): void {
 }
 
 export function update(): void {
-  if (input.btn(input.key.right)) x++;
-  if (input.btn(input.key.left)) x--;
+  if (input.btn(input.key.RIGHT)) x++;
+  if (input.btn(input.key.LEFT)) x--;
 }
 
 export function draw(): void {

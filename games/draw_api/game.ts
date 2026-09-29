@@ -56,20 +56,20 @@ export function setup(): void {
 }
 
 export function update(): void {
-  if (input.btnp(input.key.q)) system.quit();
+  if (input.btnp(input.key.Q)) system.quit();
 
   palTestIsEnabled = math.floordiv(system.frameCount(), 30) % 10 >= 5;
-  clipTestIsEnabled = input.btn(input.key.space);
+  clipTestIsEnabled = input.btn(input.key.SPACE);
 
   updateMouse();
 }
 
 /** Moves the pointer that stands in for the mouse with the D-pad. */
 function updateMouse(): void {
-  if (input.btn(input.key.left)) mouseX -= MOUSE_SPEED;
-  if (input.btn(input.key.right)) mouseX += MOUSE_SPEED;
-  if (input.btn(input.key.up)) mouseY -= MOUSE_SPEED;
-  if (input.btn(input.key.down)) mouseY += MOUSE_SPEED;
+  if (input.btn(input.key.LEFT)) mouseX -= MOUSE_SPEED;
+  if (input.btn(input.key.RIGHT)) mouseX += MOUSE_SPEED;
+  if (input.btn(input.key.UP)) mouseY -= MOUSE_SPEED;
+  if (input.btn(input.key.DOWN)) mouseY += MOUSE_SPEED;
   mouseX = math.clamp(mouseX, 0, system.width() - 1);
   mouseY = math.clamp(mouseY, 0, system.height() - 1);
 }

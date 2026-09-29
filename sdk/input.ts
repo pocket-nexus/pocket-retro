@@ -78,31 +78,31 @@ export function rawButtons(): I32 {
 
 /** The default key map: the D-pad, WASD and arrows move; Z, Space and Enter act. */
 export function mapDefaultKeys(): void {
-  mapKey(key.up, GBA_UP);
-  mapKey(key.w, GBA_UP);
-  mapKey(pad.up, GBA_UP);
-  mapKey(key.down, GBA_DOWN);
-  mapKey(key.s, GBA_DOWN);
-  mapKey(pad.down, GBA_DOWN);
-  mapKey(key.left, GBA_LEFT);
-  mapKey(key.a, GBA_LEFT);
-  mapKey(pad.left, GBA_LEFT);
-  mapKey(key.right, GBA_RIGHT);
-  mapKey(key.d, GBA_RIGHT);
-  mapKey(pad.right, GBA_RIGHT);
-  mapKey(key.z, GBA_A);
-  mapKey(key.space, GBA_A);
-  mapKey(key.kpEnter, GBA_A);
-  mapKey(pad.a, GBA_A);
-  mapKey(key.x, GBA_B);
-  mapKey(key.backspace, GBA_B);
-  mapKey(pad.b, GBA_B);
-  mapKey(key.enter, GBA_START | GBA_A);
-  mapKey(pad.start, GBA_START);
-  mapKey(key.tab, GBA_SELECT);
-  mapKey(pad.back, GBA_SELECT);
-  mapKey(pad.x, GBA_L);
-  mapKey(pad.leftShoulder, GBA_L);
-  mapKey(pad.y, GBA_R);
-  mapKey(pad.rightShoulder, GBA_R);
+  mapKey(key.UP, GBA_UP);
+  mapKey(key.W, GBA_UP);
+  mapKey(pad.DPAD_UP, GBA_UP);
+  mapKey(key.DOWN, GBA_DOWN);
+  mapKey(key.S, GBA_DOWN);
+  mapKey(pad.DPAD_DOWN, GBA_DOWN);
+  mapKey(key.LEFT, GBA_LEFT);
+  mapKey(key.A, GBA_LEFT);
+  mapKey(pad.DPAD_LEFT, GBA_LEFT);
+  mapKey(key.RIGHT, GBA_RIGHT);
+  mapKey(key.D, GBA_RIGHT);
+  mapKey(pad.DPAD_RIGHT, GBA_RIGHT);
+  mapKey(key.Z, GBA_A);
+  mapKey(key.SPACE, GBA_A);
+  mapKey(key.KP_ENTER, GBA_A);
+  mapKey(pad.A, GBA_A);
+  mapKey(key.X, GBA_B);
+  mapKey(key.BACKSPACE, GBA_B);
+  mapKey(pad.B, GBA_B);
+  mapKey(key.RETURN, GBA_START | GBA_A);
+  mapKey(pad.START, GBA_START);
+  mapKey(key.TAB, GBA_SELECT);
+  mapKey(pad.BACK, GBA_SELECT);
+  mapKey(pad.X, GBA_L);
+  mapKey(pad.LEFTSHOULDER, GBA_L);
+  mapKey(pad.Y, GBA_R);
+  mapKey(pad.RIGHTSHOULDER, GBA_R);
 }

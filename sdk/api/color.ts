@@ -1,21 +1,21 @@
-/** Pyxel's default palette (COLOR_*): `screen.cls(color.navy)`. */
+/** Pyxel's default palette (COLOR_*): `screen.cls(color.NAVY)`. */
 import type { i32 as I32 } from "@pocketjs/framework/solid/std";
 
-export const black: I32 = 0;
-export const navy: I32 = 1;
-export const purple: I32 = 2;
-export const green: I32 = 3;
-export const brown: I32 = 4;
-export const darkBlue: I32 = 5;
-export const lightBlue: I32 = 6;
-export const white: I32 = 7;
-export const red: I32 = 8;
-export const orange: I32 = 9;
-export const yellow: I32 = 10;
-export const lime: I32 = 11;
-export const cyan: I32 = 12;
-export const gray: I32 = 13;
-export const pink: I32 = 14;
-export const peach: I32 = 15;
+export const BLACK: I32 = 0;
+export const NAVY: I32 = 1;
+export const PURPLE: I32 = 2;
+export const GREEN: I32 = 3;
+export const BROWN: I32 = 4;
+export const DARK_BLUE: I32 = 5;
+export const LIGHT_BLUE: I32 = 6;
+export const WHITE: I32 = 7;
+export const RED: I32 = 8;
+export const ORANGE: I32 = 9;
+export const YELLOW: I32 = 10;
+export const LIME: I32 = 11;
+export const CYAN: I32 = 12;
+export const GRAY: I32 = 13;
+export const PINK: I32 = 14;
+export const PEACH: I32 = 15;
 /** Colors in the default palette (NUM_COLORS). */
-export const count: I32 = 16;
+export const COUNT: I32 = 16;

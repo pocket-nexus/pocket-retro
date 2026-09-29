@@ -20,11 +20,11 @@ import { hexDigit } from "../hex";
 export type { Delta } from "../gfx";
 
 /** Tilemaps (NUM_TILEMAPS). */
-export const count: I32 = 8;
+export const COUNT: I32 = 8;
 /** Width and height of a tilemap in tiles (TILEMAP_SIZE). */
-export const size: I32 = TILEMAP_SIZE;
+export const SIZE: I32 = TILEMAP_SIZE;
 /** Width and height of a tile in pixels (TILE_SIZE). */
-export const tileSize: I32 = 8;
+export const TILE_SIZE: I32 = 8;
 
 /** A tile value from image tile coordinates, as Pyxel's (tx, ty) tuples. */
 export function tile(tx: I32, ty: I32): I32 {

@@ -106,16 +106,16 @@ export function update(): void {
 
 function updatePlayer(): void {
   const lastY = playerY;
-  if (input.btn(input.key.left) || input.btn(input.pad.left)) {
+  if (input.btn(input.key.LEFT) || input.btn(input.pad.DPAD_LEFT)) {
     playerDx = -2;
     playerDirection = -1;
   }
-  if (input.btn(input.key.right) || input.btn(input.pad.right)) {
+  if (input.btn(input.key.RIGHT) || input.btn(input.pad.DPAD_RIGHT)) {
     playerDx = 2;
     playerDirection = 1;
   }
   playerDy = playerDy + 1 < 3 ? playerDy + 1 : 3;
-  if (input.btnp(input.key.space) || input.btnp(input.pad.a)) {
+  if (input.btnp(input.key.SPACE) || input.btnp(input.pad.A)) {
     playerDy = -6;
     sound.play(3, 8);
   }

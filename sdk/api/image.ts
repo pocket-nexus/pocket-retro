@@ -16,18 +16,18 @@ import {
   pset as surfacePset,
   rect as surfaceRect,
   rectb as surfaceRectb,
-  SCREEN,
+  SCREEN as SCREEN_SURFACE,
   text as surfaceText,
   tri as surfaceTri,
 } from "../gfx";
 import { hexDigit } from "../hex";
 
 /** Image banks (NUM_IMAGES). */
-export const count: I32 = 3;
+export const COUNT: I32 = 3;
 /** Width and height of a bank (IMAGE_SIZE). */
-export const size: I32 = IMAGE_SIZE;
+export const SIZE: I32 = IMAGE_SIZE;
 /** The screen as a blt source, as pyxel.screen. */
-export const screen: I32 = SCREEN;
+export const SCREEN: I32 = SCREEN_SURFACE;
 
 export function pget(img: I32, x: I32, y: I32): I32 {
   return surfacePget(img, x, y);

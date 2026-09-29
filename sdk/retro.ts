@@ -3,13 +3,15 @@
  *
  *   import { system, screen, input, sound } from "retro";
  *   system.init(160, 120);
- *   screen.cls(color.navy);
- *   if (input.btn(input.key.left)) sound.play(3, 0);
+ *   screen.cls(color.NAVY);
+ *   if (input.btn(input.key.LEFT)) sound.play(3, 0);
  *
- * Names inside a namespace follow Pyxel. Methods of Pyxel's image banks and
- * tilemaps take the bank or tilemap first: pyxel.images[1].pset(x, y, c) is
- * image.pset(1, x, y, c). Coordinates and colors are i32; convert float
- * positions with math.round(), which rounds as Pyxel does when it draws.
+ * Names inside a namespace follow Pyxel, and constants keep Pyxel's upper
+ * case without their prefix: COLOR_NAVY is color.NAVY. Methods of Pyxel's
+ * image banks and tilemaps take the bank or tilemap first:
+ * pyxel.images[1].pset(x, y, c) is image.pset(1, x, y, c). Coordinates and
+ * colors are i32; convert float positions with math.round(), which rounds as
+ * Pyxel does when it draws.
  * Namespaces name their members only: they cannot be stored or passed.
  */
 export * as system from "./api/system";
