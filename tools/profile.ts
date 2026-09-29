@@ -6,6 +6,9 @@
  * render_fn_12, pure_12) are labeled with their TypeScript names.
  *
  *   bun tools/profile.ts games/jump [--skip=120] [--samples=20000] [--interval=211] [--script=...]
+ *
+ * `--within=<label>` also lists the hottest addresses inside functions whose
+ * label contains <label>, to read against a disassembly of the ELF.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
@@ -71,6 +74,7 @@ if (import.meta.main) {
   gba.close();
 
   const counts = new Map<string, number>();
+  const addresses = new Map<number, number>();
   let symbolIndex = 0;
   const sorted = [...samples].sort((a, b) => a - b);
   for (const address of sorted) {
@@ -86,8 +90,12 @@ if (import.meta.main) {
       if (generated && labels.has(generated[1]!)) label = `${labels.get(generated[1]!)} [${generated[1]}]`;
     }
     counts.set(label, (counts.get(label) ?? 0) + 1);
+    if (args.within && label.includes(args.within)) addresses.set(address, (addresses.get(address) ?? 0) + 1);
   }
   const total = samples.length;
   const rows = [...counts].sort((a, b) => b[1] - a[1]).slice(0, Number(args.top ?? 25));
   for (const [label, count] of rows) console.log(`${((count / total) * 100).toFixed(1).padStart(5)}%  ${label}`);
+  if (addresses.size) console.log(`\nhottest addresses in ${args.within}:`);
+  for (const [address, count] of [...addresses].sort((a, b) => b[1] - a[1]).slice(0, 24))
+    console.log(`${((count / total) * 100).toFixed(1).padStart(5)}%  0x${address.toString(16)}`);
 }
