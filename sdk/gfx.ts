@@ -808,6 +808,94 @@ export function bltm(s: I32, x: I32, y: I32, m: I32, u: I32, v: I32, w: I32, h: 
   }
 }
 
+// ---- Tilemap collision ---------------------------------------------------
+
+export interface Delta {
+  dx: I32;
+  dy: I32;
+}
+
+/**
+ * Wall sets for collide(): each is a bitset over the 32 x 32 tiles of an
+ * image bank (tile x + 32 * tile y), 32 words per set.
+ */
+const WALL_SETS = 8;
+let wallBits: I32[] = fill(WALL_SETS * 32, 0);
+let wallSetCount: I32 = 0;
+
+/** Registers a list of tile values (see tile()) as a wall set and returns its id. */
+export function walls(tiles: I32[]): I32 {
+  if (wallSetCount >= WALL_SETS) return WALL_SETS - 1;
+  const set = wallSetCount;
+  wallSetCount++;
+  for (const t of tiles) {
+    const tx = t & 255,
+      ty = (t >> 8) & 255;
+    if (tx < 32 && ty < 32) wallBits[set * 32 + ty] |= 1 << tx;
+  }
+  return set;
+}
+
+function isWall(m: I32, tx: I32, ty: I32, set: I32): boolean {
+  if (tx < 0 || ty < 0 || tx >= TILEMAP_SIZE || ty >= TILEMAP_SIZE) return false;
+  const t = tget(m, tx, ty);
+  const cx = t & 255,
+    cy = (t >> 8) & 255;
+  return cx < 32 && cy < 32 && (wallBits[set * 32 + cy] & (1 << cx)) !== 0;
+}
+
+/** floor(a / 8) for any sign. */
+function tileOf(a: I32): I32 {
+  return a >> 3;
+}
+
+/**
+ * Sweeps one axis of a w x h box at `pos` by `delta` against walls, as
+ * tilemap.rs collide_resolve_axis does; returns the allowed delta. `vertical`
+ * sweeps y with the cross axis over x tiles.
+ */
+function resolveAxis(
+  m: I32,
+  pos: I32,
+  size: I32,
+  delta: I32,
+  crossStart: I32,
+  crossEnd: I32,
+  set: I32,
+  vertical: boolean,
+): I32 {
+  if (delta === 0) return 0;
+  if (delta > 0) {
+    const edge = pos + size - 1;
+    for (let primary = tileOf(edge) + 1; primary <= tileOf(edge + delta); primary++)
+      for (let cross = crossStart; cross <= crossEnd; cross++)
+        if (vertical ? isWall(m, cross, primary, set) : isWall(m, primary, cross, set)) return primary * 8 - size - pos;
+  } else {
+    for (let primary = tileOf(pos) - 1; primary >= tileOf(pos + delta); primary--)
+      for (let cross = crossStart; cross <= crossEnd; cross++)
+        if (vertical ? isWall(m, cross, primary, set) : isWall(m, primary, cross, set)) return (primary + 1) * 8 - pos;
+  }
+  return delta;
+}
+
+/**
+ * pyxel.tilemaps[m].collide(x, y, w, h, dx, dy, walls) for integer positions:
+ * moves a w x h box by (dx, dy), stopping at tiles of wall set `set`, and
+ * returns the allowed movement. The larger axis resolves first.
+ */
+export function collide(m: I32, x: I32, y: I32, w: I32, h: I32, dx: I32, dy: I32, set: I32): Delta {
+  const ax = dx < 0 ? -dx : dx,
+    ay = dy < 0 ? -dy : dy;
+  if (ax >= ay) {
+    const ndx = resolveAxis(m, x, w, dx, tileOf(y), tileOf(y + h - 1), set, false);
+    const ndy = resolveAxis(m, y, h, dy, tileOf(x + ndx), tileOf(x + ndx + w - 1), set, true);
+    return { dx: ndx, dy: ndy };
+  }
+  const ndy = resolveAxis(m, y, h, dy, tileOf(x), tileOf(x + w - 1), set, true);
+  const ndx = resolveAxis(m, x, w, dx, tileOf(y + ndy), tileOf(y + ndy + h - 1), set, false);
+  return { dx: ndx, dy: ndy };
+}
+
 // ---- Text ----------------------------------------------------------------
 
 export const FONT_WIDTH: I32 = 4;

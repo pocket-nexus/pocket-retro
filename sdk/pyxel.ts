@@ -23,6 +23,9 @@ import {
 } from "@pocketjs/framework/solid/std";
 import {
   blt as surfaceBlt,
+  collide as tilemapCollide,
+  walls as tilemapWalls,
+  type Delta,
   bltm as surfaceBltm,
   bltTransformed,
   circ as surfaceCirc,
@@ -516,6 +519,19 @@ export function tget(tm: I32, x: I32, y: I32): I32 {
 /** pyxel.tilemaps[tm].pset(x, y, tile), in tiles. */
 export function tset(tm: I32, x: I32, y: I32, t: I32): void {
   tileSet(tm, x, y, t);
+}
+
+/** Registers wall tiles for collide() and returns the wall set id (at most 8 sets). */
+export function walls(tiles: I32[]): I32 {
+  return tilemapWalls(tiles);
+}
+
+/**
+ * pyxel.tilemaps[tm].collide(x, y, w, h, dx, dy, walls) with integer
+ * positions: the movement of a w x h box that stops at the wall set's tiles.
+ */
+export function collide(tm: I32, x: I32, y: I32, w: I32, h: I32, dx: I32, dy: I32, wallSet: I32): Delta {
+  return tilemapCollide(tm, x, y, w, h, dx, dy, wallSet);
 }
 
 /** pyxel.tilemaps[tm].imgsrc. */
