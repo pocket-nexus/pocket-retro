@@ -21,7 +21,10 @@ const SCRIPTS: Record<string, string> = {
   jump: "60:- 60:RIGHT 30:LEFT 150:-",
   snake: "30:- 20:UP 20:LEFT 20:DOWN 200:- 5:START 30:-",
   shooter: "60:- 5:START 60:- 20:A 5:- 20:A 60:LEFT 60:RIGHT+A 60:-",
-  platformer: "60:- 120:RIGHT 10:RIGHT+A 90:RIGHT 30:LEFT",
+  // The README demo's route: the heaviest scenes are the brick walls of the scrolled level.
+  platformer:
+    "26:- 108:RIGHT 2:RIGHT+A 18:RIGHT 2:RIGHT+A 86:RIGHT 2:RIGHT+A 10:RIGHT 2:RIGHT+A 18:RIGHT 2:RIGHT+A 70:RIGHT " +
+    "2:RIGHT+A 74:RIGHT 2:RIGHT+A 46:RIGHT 2:RIGHT+A 138:RIGHT 2:RIGHT+A 14:RIGHT 2:RIGHT+A 2:RIGHT",
   // The pal() test runs from frame 150 (VBlank 300); A holds the clip test.
   draw_api: "60:- 30:RIGHT 30:DOWN 60:A 180:- 120:A 60:LEFT+UP",
   // Rescues two astronauts, flies into a meteor, then starts again.
