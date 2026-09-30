@@ -194,6 +194,13 @@ Add the game to `SCRIPTS` in `tests/games.test.ts` with input that reaches
 its main scenes, and run `bun test tests/games.test.ts`: every game must
 build, draw, and keep up with its frame rate.
 
+To reach late scenes (a clear, the last levels), plan the input on the
+original: run its Python modules under a stub `pyxel` module that steps one
+frame at a time with given buttons, search a route there, and write its
+per-frame buttons as a script (at 30 fps, two VBlanks a frame from a
+START step at a known VBlank). The ROM follows the route exactly as long as
+no frame is late (Cursed Caverns: a 2,220-frame route to the exit).
+
 ## 5. Fit the frame budget
 
 Every second the ROM prints
