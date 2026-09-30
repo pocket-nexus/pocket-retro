@@ -504,6 +504,10 @@ function nextEvent(c: I32, half: I32): boolean {
  */
 function passClassic(c: I32, n: I32, half: I32): boolean {
   if (n < 0 || n >= NUM_SOUNDS || len(mml[n]) > 0) return false;
+  // Only a playlist a tick or more behind passes sounds: one in time plays
+  // them, as counting a sound costs about what playing it does, and passing
+  // an empty sound would skip settings a note still sounding plays with.
+  if (channels[c].remaining > -2 * half) return false;
   const span = classicSpan(n);
   if (span < 0 || channels[c].remaining + span > half) return false;
   for (let s = 0; s < len(channels[c].sounds); s++) if (len(mml[channels[c].sounds[s]]) > 0) return false;
