@@ -39,12 +39,14 @@ function readDemo(game: string): Demo {
   return { script, skip: skip ? Number(skip[1]) : 0 };
 }
 
-/** Clips of the showcase: a game's demo from its skip, for this many VBlanks. */
-const SHOWCASE: { game: string; vblanks: number }[] = [
-  { game: "jump", vblanks: 240 },
-  { game: "shooter", vblanks: 240 },
-  { game: "platformer", vblanks: 240 },
-  { game: "snake", vblanks: 180 },
+/** Clips of the showcase: a game's demo, `from` VBlanks after its skip, for `vblanks` VBlanks. */
+const SHOWCASE: { game: string; from?: number; vblanks: number }[] = [
+  { game: "mega_wing", vblanks: 180 },
+  { game: "megaball", from: 240, vblanks: 180 },
+  { game: "cursed_caverns", vblanks: 180 },
+  { game: "laser_jetman", vblanks: 180 },
+  { game: "daylight", vblanks: 180 },
+  { game: "jump", vblanks: 180 },
 ];
 
 /** Every other VBlank: 30 images a second, GIF delays of 3 and 4 centiseconds. */
@@ -184,7 +186,7 @@ interface Console {
 }
 
 /** A Game Boy Advance in the logo's colors, its display left transparent. */
-export function drawConsole(): Console {
+function drawConsole(): Console {
   const canvas = new Canvas(420, 240);
   const bodyX = 6,
     bodyY = 8,
@@ -255,10 +257,15 @@ async function recordShowcase(): Promise<void> {
   const blank = new Uint8Array(SCREEN_WIDTH * SCREEN_HEIGHT * 4);
   for (let i = 3; i < blank.length; i += 4) blank[i] = 255;
   for (const clip of SHOWCASE) {
-    const { frames: clipFrames } = await capture(clip.game, readDemo(clip.game), clip.vblanks);
-    // A few dark frames between games, as when a cartridge is changed.
-    for (let i = 0; i < 4; i++) show(blank);
+    const demo = readDemo(clip.game);
+    const { frames: clipFrames } = await capture(
+      clip.game,
+      { ...demo, skip: demo.skip + (clip.from ?? 0) },
+      clip.vblanks,
+    );
     clipFrames.forEach(show);
+    // A few dark frames after each game, as when a cartridge is changed.
+    for (let i = 0; i < 4; i++) show(blank);
   }
   const gif = encodeGif(
     frames.map((rgba) => ({ rgba, duration: STEP / REFRESH_RATE })),

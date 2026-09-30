@@ -1,0 +1,4 @@
+# The title and menu, then play with screen shakes and lights, and the weapon ring.
+# skip: 70
+90:- 5:START 50:- 5:A 150:- 50:RIGHT 40:DOWN 50:LEFT 40:UP+LEFT 30:RIGHT
+40:DOWN+RIGHT 5:A 120:- 60:LEFT 60:UP
