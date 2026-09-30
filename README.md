@@ -139,7 +139,7 @@ Ninja and a C compiler for the headless emulator the tools use. The details
 are in [AGENTS.md](AGENTS.md#prerequisites).
 
 ```sh
-git clone --recursive https://github.com/pocket-nexus/pocket-pyxel.git pocket-retro
+git clone --recursive https://github.com/pocket-nexus/pocket-retro.git
 cd pocket-retro
 bun install && bun install --cwd pocketjs
 rustup toolchain install nightly-2026-07-01 --component rust-src
