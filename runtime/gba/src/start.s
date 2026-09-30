@@ -200,7 +200,7 @@ __aeabi_memcpy8:
 retro_copy:
     eor r3, r0, r1
     tst r3, #3
-    bne copy_bytes
+    bne copy_shifted
 copy_align:
     cmp r2, #0
     bxeq lr
@@ -234,6 +234,43 @@ copy_bytes:
     ldrb r3, [r1], #1
     strb r3, [r0], #1
     sub r2, r2, #1
+    b copy_bytes
+
+@ Source and destination differ in alignment: bytes until the destination
+@ is aligned, then each word is put together from two aligned source words,
+@ about four times as fast as bytes. Reading a whole source word may read up
+@ to three bytes past either end of the source, which the GBA allows.
+copy_shifted:
+    cmp r2, #8
+    blo copy_bytes
+shifted_align:
+    tst r0, #3
+    beq shifted_words
+    ldrb r3, [r1], #1
+    strb r3, [r0], #1
+    sub r2, r2, #1
+    b shifted_align
+shifted_words:
+    push {r4-r6}
+    and r12, r1, #3
+    bic r1, r1, #3
+    mov r12, r12, lsl #3
+    rsb r6, r12, #32
+    ldr r3, [r1], #4
+shifted_loop:
+    cmp r2, #4
+    blo shifted_done
+    ldr r4, [r1], #4
+    mov r5, r3, lsr r12
+    orr r5, r5, r4, lsl r6
+    str r5, [r0], #4
+    mov r3, r4
+    sub r2, r2, #4
+    b shifted_loop
+shifted_done:
+    sub r1, r1, #4
+    add r1, r1, r12, lsr #3
+    pop {r4-r6}
     b copy_bytes
 
 .global memmove
