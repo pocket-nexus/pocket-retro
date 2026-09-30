@@ -100,12 +100,14 @@ ROM with late frames can be torn: the page flip happened mid-display.
   the generated function in IWRAM as ARM code (`tools/lib/iwram.ts`). ARM
   code cannot inline Thumb code (nor generic Rust helpers, iterators or
   trait calls), so a tagged function writes small helpers out inline or calls
-  other tagged functions.
+  other tagged functions. A game may tag its own functions too: their code
+  takes IWRAM from that game's screen only (check `iwram=` in its stats).
 - IWRAM (32 KiB) is shared, in this order, by tagged code, the model struct
   (one field per module-level `let` of the SDK and the game, 12 bytes per
   array), arrays of at most 512 bytes created with the model (up to 1.5 KiB
   in all, less when tagged code leaves too little room for a 160 x 120
-  screen; arrays created later, as in `setup()`, go to EWRAM), and last the
+  screen, or then for a 128 x 128 one; arrays created later, as in
+  `setup()`, go to EWRAM), and last the
   screen, moved there after boot if it still fits. A screen in EWRAM makes
   `present` and every draw about a third slower; screens over about 20 KB
   (200 x 150) never fit. `tests/games.test.ts` requires screens up to

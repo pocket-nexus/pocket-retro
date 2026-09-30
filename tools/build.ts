@@ -114,13 +114,18 @@ impl Game for Model {
 extern "C" fn retro_game_main() -> ! {
     // The model and its first small arrays go to IWRAM, within 1.5 KiB, leaving
     // room for the screen, which the host moves there after boot. Where tagged
-    // code leaves less, the arrays give way to a 160 x 120 screen if it fits.
+    // code leaves less, the arrays give way to a 160 x 120 screen if it fits,
+    // else to a 128 x 128 one, as a game that tags its own code may have.
     let (_, size) = pocket_retro_gba::memory::iwram_heap();
-    let screen = 160 * 120 + 64 + core::mem::size_of::<AppModel>();
-    let budget = if size >= screen { (size - screen).min(1536) } else { 1536 };
+    let model_bytes = core::mem::size_of::<AppModel>();
+    let budget = [160 * 120, 128 * 128]
+        .iter()
+        .map(|pixels| pixels + 64 + model_bytes)
+        .find(|&room| size >= room)
+        .map_or(1536, |room| (size - room).min(1536));
     let model = pocket_retro_gba::memory::in_iwram_up_to(512, budget, AppModel::default);
     let mut game = Model(pocket_retro_gba::memory::in_iwram(|| alloc::boxed::Box::new(model)));
-    pocket_retro_gba::log!("model {} bytes", core::mem::size_of::<AppModel>());
+    pocket_retro_gba::log!("model {} bytes", model_bytes);
     pocket_retro_gba::run(&mut game)
 }
 `;
@@ -156,7 +161,11 @@ export async function buildGame(gameDirectory: string, options: BuildOptions = {
       `${diagnostic.file}:${diagnostic.line}:${diagnostic.column}: ${diagnostic.severity}: ${diagnostic.message}`,
     );
   const model = resolve(build, "gen/app_model.rs");
-  const hot = placeInIwram(generateModelRust(program), iwramFunctions(SDK));
+  // Hot functions of the SDK and of the game itself go to IWRAM.
+  const hot = placeInIwram(
+    generateModelRust(program),
+    new Set([...iwramFunctions(SDK), ...iwramFunctions(gameDirectory)]),
+  );
   const rust = options.noInline
     ? hot.rust.replace(/^(\s*)fn ((?:render_)?fn_\d+|pure_\d+)\(/gm, "$1#[inline(never)]\n$1fn $2(")
     : hot.rust;
