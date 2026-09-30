@@ -124,8 +124,13 @@ export function resetColorMap(s: I32): void {
 }
 
 export function setDither(s: I32, alpha: F32): void {
+  // alpha * 16 > t for an integer t is t < ceil(alpha * 16): one float
+  // conversion rather than 16 emulated float comparisons.
+  const scaled: F32 = alpha * f32(16);
+  let limit = i32(scaled);
+  if (f32(limit) < scaled) limit++;
   let mask = 0;
-  for (let i = 0; i < 16; i++) if (alpha * f32(16) > f32(DITHER[i])) mask |= 1 << i;
+  for (let i = 0; i < 16; i++) if (DITHER[i] < limit) mask |= 1 << i;
   ditherMask[s] = mask;
 }
 
@@ -254,6 +259,20 @@ function ditherRow(s: I32, left: I32, right: I32, y: I32, value: I32): void {
     }
 }
 
+/**
+ * Rows top to bottom of column x through dither, which lets the same pixels
+ * through every 4 rows: each of the first 4 it lets through starts a fill of
+ * every fourth row. The column is inside the clip rectangle.
+ */
+function ditherColumn(s: I32, top: I32, bottom: I32, x: I32, value: I32): void {
+  const bits = ditherMask[s] >> (x & 3);
+  for (let y = top; y < top + 4 && y <= bottom; y++)
+    if ((bits & (1 << ((y & 3) << 2))) !== 0) {
+      if (s === SCREEN) fillRect(screen, y * width + x, 4 * width, 1, ((bottom - y) >> 2) + 1, u8(value));
+      else fillRect(banks[s], y * IMAGE_SIZE + x, 4 * IMAGE_SIZE, 1, ((bottom - y) >> 2) + 1, u8(value));
+    }
+}
+
 /** Vertical run from y1 to y2 inclusive on column x, clipped; value is mapped. */
 /** @iwram */
 function column(s: I32, y1: I32, y2: I32, x: I32, value: I32): void {
@@ -265,7 +284,10 @@ function column(s: I32, y1: I32, y2: I32, x: I32, value: I32): void {
   if (ditherMask[s] !== ALL_PIXELS) {
     for (let y = top; y <= bottom; y++) put(s, x, y, value);
   } else if (s === SCREEN) {
-    fillRect(screen, top * width + x, width, 1, bottom - top + 1, u8(value));
+    // One store a row: fillRect's setup of each row costs several pixels' worth.
+    const color = u8(value),
+      last = bottom * width + x;
+    for (let i = top * width + x; i <= last; i += width) screen[i] = color;
   } else {
     fillRect(banks[s], top * IMAGE_SIZE + x, IMAGE_SIZE, 1, bottom - top + 1, u8(value));
   }
@@ -379,15 +401,17 @@ export function rect(s: I32, x: I32, y: I32, w: I32, h: I32, col: I32): void {
   const value = mapped(s, col),
     left = x - camX[s],
     top = y - camY[s];
-  if (ditherMask[s] !== ALL_PIXELS) {
-    for (let j = top; j < top + h; j++) row(s, left, left + w - 1, j, value);
-    return;
-  }
   const x1 = larger(left, clipX1[s]),
     y1 = larger(top, clipY1[s]),
     x2 = left + w - 1 < clipX2[s] ? left + w - 1 : clipX2[s],
     y2 = top + h - 1 < clipY2[s] ? top + h - 1 : clipY2[s];
   if (x1 > x2 || y1 > y2) return;
+  if (ditherMask[s] !== ALL_PIXELS) {
+    // Through dither a row or a column at a time, whichever are fewer.
+    if (x2 - x1 < y2 - y1) for (let i = x1; i <= x2; i++) ditherColumn(s, y1, y2, i, value);
+    else for (let j = y1; j <= y2; j++) row(s, x1, x2, j, value);
+    return;
+  }
   if (s === SCREEN) fillRect(screen, y1 * width + x1, width, x2 - x1 + 1, y2 - y1 + 1, u8(value));
   else fillRect(banks[s], y1 * IMAGE_SIZE + x1, IMAGE_SIZE, x2 - x1 + 1, y2 - y1 + 1, u8(value));
 }
@@ -433,7 +457,15 @@ function ellipseArea(c2x: I32, c2y: I32, a: I32, b: I32, x: I32): void {
 // Circles are ellipseArea(0, 0, 2r, 2r, xi) for xi = 0..r: column xi spans
 // -span..span, where span depends on r and xi only, so small radii keep it.
 const CIRCLE_CACHE: I32 = 64;
-/** circleSpan(r, xi) at (r * (r + 1)) / 2 + xi for r < CIRCLE_CACHE, -1 until computed. */
+/** (CIRCLE_CACHE * (CIRCLE_CACHE + 1)) / 2: entries for the radii below CIRCLE_CACHE. */
+const CIRCLE_TABLE: I32 = 2080;
+/** Radii below this are drawn by smallCircleToScreen() when they can be. */
+const SMALL_CIRCLE: I32 = 16;
+/**
+ * For r < CIRCLE_CACHE, -1 until computed: circleSpan(r, xi) at
+ * (r * (r + 1)) / 2 + xi; for r < SMALL_CIRCLE, the half-width of row k of
+ * the filled circle at CIRCLE_TABLE + (r * (r + 1)) / 2 + k.
+ */
 let circleSpans: I16[] = [];
 
 /** The half-height of column xi of a circle of radius r, as ellipseArea() computes it. */
@@ -442,13 +474,54 @@ function circleSpan(r: I32, xi: I32): I32 {
     ellipseArea(0, 0, 2 * r, 2 * r, xi);
     return areaY2;
   }
-  if (len(circleSpans) === 0) circleSpans = fill((CIRCLE_CACHE * (CIRCLE_CACHE + 1)) >> 1, i16(-1));
+  if (len(circleSpans) === 0) circleSpans = fill(CIRCLE_TABLE + 136, i16(-1)); // 136: (SMALL_CIRCLE * (SMALL_CIRCLE + 1)) / 2
   const at = ((r * (r + 1)) >> 1) + xi;
   if (circleSpans[at] < 0) {
     ellipseArea(0, 0, 2 * r, 2 * r, xi);
     circleSpans[at] = i16(areaY2);
   }
   return i32(circleSpans[at]);
+}
+
+/** Makes the row half-widths of radius r < SMALL_CIRCLE, at CIRCLE_TABLE + (r * (r + 1)) / 2 in circleSpans. */
+function circleRows(r: I32): void {
+  const base = CIRCLE_TABLE + ((r * (r + 1)) >> 1);
+  let m = r;
+  for (let k = 0; k <= r; k++) {
+    while (m > 0 && circleSpan(r, m) < k) m--;
+    const span = circleSpan(r, k);
+    circleSpans[base + k] = i16(span > m ? span : m);
+  }
+}
+
+/**
+ * circ() on the screen for a radius below SMALL_CIRCLE, if the circle lies
+ * inside the clip rectangle and dither is off: writes its rows pixel by
+ * pixel, since a fill's setup costs more than a few pixels, and returns
+ * true. Row 0 is written twice, which costs less than a test per row.
+ */
+/** @iwram */
+function smallCircleToScreen(cx: I32, cy: I32, r: I32, color: U8): boolean {
+  if (
+    ditherMask[SCREEN] !== ALL_PIXELS ||
+    cx - r < clipX1[SCREEN] ||
+    cx + r > clipX2[SCREEN] ||
+    cy - r < clipY1[SCREEN] ||
+    cy + r > clipY2[SCREEN]
+  )
+    return false;
+  const base = CIRCLE_TABLE + ((r * (r + 1)) >> 1);
+  if (len(circleSpans) === 0 || circleSpans[base] < 0) circleRows(r);
+  for (let k = 0; k <= r; k++) {
+    const half = i32(circleSpans[base + k]),
+      above = (cy - k) * width + cx - half,
+      below = (cy + k) * width + cx - half;
+    for (let i = 0; i <= 2 * half; i++) {
+      screen[above + i] = color;
+      screen[below + i] = color;
+    }
+  }
+  return true;
 }
 
 export function circ(s: I32, x: I32, y: I32, r: I32, col: I32): void {
@@ -460,7 +533,8 @@ export function circ(s: I32, x: I32, y: I32, r: I32, col: I32): void {
   // canvas.rs fills column xi and row xi for each xi. Spans shrink as xi
   // grows, so their union is one run per row k: as wide as row k and the
   // columns 0..m that reach it. Inside the screen's clip rectangle the runs
-  // are filled directly.
+  // are written directly.
+  if (s === SCREEN && r < SMALL_CIRCLE && smallCircleToScreen(cx, cy, r, u8(value))) return;
   const inside =
     s === SCREEN &&
     ditherMask[s] === ALL_PIXELS &&
