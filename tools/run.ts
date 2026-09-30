@@ -20,7 +20,7 @@ import { Gba, KEY, SCREEN_HEIGHT, SCREEN_WIDTH, type KeyName } from "./emu/mgba.
 import { encodeGif, type GifFrame } from "./lib/gif.ts";
 
 /** VBlanks per second: 16.78 MHz over 280,896 cycles a frame. */
-const REFRESH_RATE = 16_777_216 / 280_896;
+export const REFRESH_RATE = 16_777_216 / 280_896;
 
 export interface Step {
   frames: number;

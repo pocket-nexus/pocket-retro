@@ -3,6 +3,8 @@
  * colors, so every frame shares one global palette. Frames that repeat the
  * previous one are merged into a longer delay, and each later frame stores
  * only the rectangle that changed, with unchanged pixels transparent.
+ * Pixels with alpha below 128 are transparent; as later frames only draw
+ * over earlier ones, a pixel that is transparent must stay so.
  */
 
 export interface GifFrame {
@@ -20,7 +22,7 @@ export function encodeGif(frames: GifFrame[], width: number, height: number, sca
   const indexed = frames.map(({ rgba }) => {
     const pixels = new Uint8Array(width * height);
     for (let i = 0; i < pixels.length; i++) {
-      const rgb = (rgba[i * 4]! << 16) | (rgba[i * 4 + 1]! << 8) | rgba[i * 4 + 2]!;
+      const rgb = rgba[i * 4 + 3]! < 128 ? -1 : (rgba[i * 4]! << 16) | (rgba[i * 4 + 1]! << 8) | rgba[i * 4 + 2]!;
       let index = colors.get(rgb);
       if (index === undefined) {
         index = colors.size;
@@ -31,7 +33,8 @@ export function encodeGif(frames: GifFrame[], width: number, height: number, sca
     }
     return pixels;
   });
-  const transparent = colors.size;
+  // Transparent pixels share the index of unchanged ones, past the colors.
+  const transparent = colors.has(-1) ? colors.get(-1)! : colors.size;
   let bits = 1;
   while (1 << bits < colors.size + 1) bits++;
 
@@ -43,7 +46,7 @@ export function encodeGif(frames: GifFrame[], width: number, height: number, sca
   u16(height * scale);
   out.push(0x80 | ((bits - 1) << 4) | (bits - 1), 0, 0);
   const table = new Uint8Array(3 << bits);
-  for (const [rgb, index] of colors) table.set([rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff], index * 3);
+  for (const [rgb, index] of colors) if (rgb >= 0) table.set([rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff], index * 3);
   out.push(...table);
   // NETSCAPE2.0 application extension: loop forever.
   out.push(0x21, 0xff, 11);
@@ -63,7 +66,7 @@ export function encodeGif(frames: GifFrame[], width: number, height: number, sca
     let [left, top, right, bottom] = [0, 0, width, height];
     if (previous) [left, top, right, bottom] = changedRect(previous, pixels, width, height);
     // Graphic control extension: keep the previous frame under this one.
-    out.push(0x21, 0xf9, 4, (1 << 2) | (previous ? 1 : 0), delay & 0xff, delay >> 8, transparent, 0);
+    out.push(0x21, 0xf9, 4, (1 << 2) | 1, delay & 0xff, delay >> 8, transparent, 0);
     const w = right - left,
       h = bottom - top;
     out.push(0x2c);

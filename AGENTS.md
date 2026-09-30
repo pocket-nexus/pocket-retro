@@ -15,11 +15,12 @@ JavaScript engine and no Python on the device.
 | `sdk/assets.ts` | Stub of the per-game asset module that `tools/lib/assets.ts` generates at build time              |
 | `runtime/gba/`  | Rust host: boot, IRQ, Mode 4 display, keypad, 4-voice mixer, heaps, `Game` trait, linker script   |
 | `games/<name>/` | Ported games: `game.ts` (setup, update, draw), `retro.json` manifest, `assets/`                   |
-| `tools/`        | `build.ts` (game → ROM), `run.ts` (headless play, screenshots, WAV), `profile.ts` (cycle profile) |
-| `tools/lib/`    | `.pyxres`/`.pyxpal` reader, asset baker, ROM packer, IWRAM placement, PNG and zip codecs          |
+| `tools/`        | `build.ts` (game → ROM), `run.ts` (play headless: PNG, WAV, GIF), `profile.ts` (cycle profile)    |
+| `tools/lib/`    | `.pyxres`/`.pyxpal` reader, asset baker, ROM packer, IWRAM placement, PNG, GIF and zip codecs     |
 | `tools/emu/`    | Headless mGBA: `setup.ts` builds `libmgba` + `shim.c`, `mgba.ts` binds it                         |
 | `skills/`       | Agent skills; `port-pyxel-game` is the procedure for porting a game (`.claude/skills` links here) |
 | `pocketjs/`     | PocketJS, a git submodule: the MicroTS compiler, `@pocketjs/framework` and the `microts` crate    |
+| `docs/assets/`  | README media: the logo, and the GIFs that `tools/media.ts` records                                |
 
 To port a game, follow `skills/port-pyxel-game/SKILL.md`.
 
@@ -41,6 +42,8 @@ crate), `dist/<game>.gba` and `.elf`, `.cache/` (mGBA, cargo target).
 ```sh
 bun tools/build.ts games/jump            # → dist/jump.gba (add --no-inline for profiling builds)
 bun tools/run.ts dist/jump.gba --script="120:- 30:RIGHT 30:A" --shot=out.png --wav=out.wav
+bun tools/run.ts dist/jump.gba --script="600:RIGHT" --gif=out.gif --gif-skip=60   # animated GIF of the screen
+bun tools/media.ts jump                  # re-record docs/assets/games/jump.gif (no arguments: all, and the showcase)
 bun tools/profile.ts games/jump          # cycle-sampled profile of the last build
 bun tools/profile.ts games/jump --script="60:RIGHT" --within=blt   # plus hot addresses inside blt
 ```
