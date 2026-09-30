@@ -86,7 +86,8 @@ ROM with late frames can be torn: the page flip happened mid-display.
   (`tools/build.ts`) calls `boot`, then `frame(keys, audioTicks)` per frame.
 - Resources are baked at build time (`retro.json` → `tools/lib/assets.ts`):
   image banks and tilemaps become embedded cartridge data, read in place.
-  A bank is copied to RAM on its first write; tilemap writes go to an overlay.
+  A bank is copied to RAM on its first write, a tilemap 16 x 16 tiles at a
+  time (a `tilemap.blt` of whole chunks shares them until one is written).
 - Rasterization follows pyxel-core `canvas.rs` but uses integer and fixed
   point math: the GBA has no FPU and soft float costs 100+ cycles per op.
 - Sound follows pyxel-core 2.9: `sdk/sound.ts` compiles `Sound.set` data and

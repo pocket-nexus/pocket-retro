@@ -10,6 +10,7 @@ import {
   tget,
   tile as tileValue,
   TILEMAP_SIZE,
+  tilemapBlt,
   tilemapImage,
   tset,
   walls as tilemapWalls,
@@ -71,6 +72,15 @@ export function set(tm: I32, x: I32, y: I32, rows: string[]): void {
       digits = 0;
     }
   }
+}
+
+/**
+ * pyxel.tilemaps[tm].blt(x, y, src, u, v, w, h, tilekey), in tiles: copies
+ * the w x h tiles at (u, v) of tilemap src to (x, y) of tilemap tm. Negative
+ * w or h flips; source tiles equal to tilekey are left out (-1 for none).
+ */
+export function blt(tm: I32, x: I32, y: I32, src: I32, u: I32, v: I32, w: I32, h: I32, tilekey: I32 = -1): void {
+  tilemapBlt(tm, x, y, src, u, v, w, h, tilekey);
 }
 
 /** pyxel.tilemaps[tm].imgsrc. */

@@ -23,10 +23,12 @@ import {
   push,
   sin as stdSin,
   u8,
+  u16,
   type f32 as F32,
   type i16 as I16,
   type i32 as I32,
   type u8 as U8,
+  type u16 as U16,
 } from "@pocketjs/framework/solid/std";
 import { IMAGES, TILEMAP_IMAGES, TILEMAPS } from "./assets";
 import { height, screen, width } from "./hw";
@@ -928,14 +930,20 @@ export function bltTransformed(
 
 export const TILEMAP_SIZE: I32 = 256;
 const TILEMAP_BYTES: I32 = 131072;
-const OVERLAY_CAPACITY: I32 = 2048;
 /**
- * Tiles written at run time, in an open-addressing hash over the cartridge
- * tilemaps: key tilemap << 16 | y << 8 | x (or -1 when free), value tile.
+ * Tilemaps are read from the cartridge in chunks of 16 x 16 tiles; the first
+ * write to a chunk copies it into RAM, where it is read and written from
+ * then on. chunkOf holds, for each tilemap m and chunk (cx, cy) at
+ * m << 8 | cy << 4 | cx, its index in chunks or -1, and stays empty until
+ * the first write. A chunk holds its 256 tiles, then the number of places in
+ * chunkOf that share it: a tilemap blt of whole chunks shares them, and a
+ * write to a shared chunk copies it first. Chunks no place uses are reused;
+ * writes needing more than MAX_CHUNKS chunks are dropped.
  */
-let overlayKeys: I32[] = [];
-let overlayTiles: I32[] = [];
-let overlayCount: I32 = 0;
+const MAX_CHUNKS: I32 = 256;
+const CHUNK_USERS: I32 = 256;
+let chunkOf: I16[] = [];
+let chunks: U16[][] = [];
 let tilemapSources: I32[] = [0, 0, 0, 0, 0, 0, 0, 0];
 
 export function resetTilemaps(): void {
@@ -947,40 +955,174 @@ export function tile(tx: I32, ty: I32): I32 {
   return (tx & 255) | ((ty & 255) << 8);
 }
 
-function slot(key: I32): I32 {
-  let index = ((key * 0x45d9f3b) >>> 21) & (OVERLAY_CAPACITY - 1);
-  while (overlayKeys[index] !== -1 && overlayKeys[index] !== key) index = (index + 1) & (OVERLAY_CAPACITY - 1);
-  return index;
-}
-
 /**
  * The tile at (x, y) of tilemap m, in tiles; outside the map it is tile(0, 0).
  * Out of IWRAM: tilesToScreen reads unchanged tiles itself.
  */
 export function tget(m: I32, x: I32, y: I32): I32 {
   if (x < 0 || y < 0 || x >= TILEMAP_SIZE || y >= TILEMAP_SIZE) return 0;
-  if (overlayCount > 0) {
-    const index = slot((m << 16) | (y << 8) | x);
-    if (overlayKeys[index] !== -1) return overlayTiles[index];
+  if (len(chunkOf) > 0) {
+    const chunk = i32(chunkOf[(m << 8) | ((y >> 4) << 4) | (x >> 4)]);
+    if (chunk >= 0) return i32(chunks[chunk][((y & 15) << 4) | (x & 15)]);
   }
   const at = m * TILEMAP_BYTES + (y * TILEMAP_SIZE + x) * 2;
   return i32(TILEMAPS[at]) | (i32(TILEMAPS[at + 1]) << 8);
 }
 
+/** A chunk no place uses, or a new one; -1 past MAX_CHUNKS. Its tiles are left as they are. */
+function freeChunk(): I32 {
+  for (let c = 0; c < len(chunks); c++) if (chunks[c][CHUNK_USERS] === u16(0)) return c;
+  if (len(chunks) >= MAX_CHUNKS) return -1;
+  push(chunks, fill(CHUNK_USERS + 1, u16(0)));
+  return len(chunks) - 1;
+}
+
+/** Makes place `at` of chunkOf use chunk c (or none, -1), releasing the chunk it used. */
+function useChunk(at: I32, c: I32): void {
+  const old = i32(chunkOf[at]);
+  if (old >= 0) chunks[old][CHUNK_USERS] = u16(i32(chunks[old][CHUNK_USERS]) - 1);
+  if (c >= 0) chunks[c][CHUNK_USERS] = u16(i32(chunks[c][CHUNK_USERS]) + 1);
+  chunkOf[at] = i16(c);
+}
+
+/**
+ * The index in chunks of chunk (cx, cy) of tilemap m, made its own: copied
+ * into RAM on first use and from a shared chunk on the first write after,
+ * except when the caller overwrites all its tiles; -1 past MAX_CHUNKS.
+ */
+function writableChunk(m: I32, cx: I32, cy: I32, overwritten: boolean): I32 {
+  if (len(chunkOf) === 0) chunkOf = fill(8 * 256, i16(-1));
+  const at = (m << 8) | (cy << 4) | cx,
+    shared = i32(chunkOf[at]);
+  if (shared >= 0 && chunks[shared][CHUNK_USERS] === u16(1)) return shared;
+  const chunk = freeChunk();
+  if (chunk < 0) return -1;
+  useChunk(at, chunk);
+  if (overwritten) return chunk;
+  if (shared >= 0) {
+    copyRange(chunks[chunk], 0, chunks[shared], 0, 256);
+    return chunk;
+  }
+  for (let j = 0; j < 16; j++) {
+    const from = m * TILEMAP_BYTES + ((cy * 16 + j) * TILEMAP_SIZE + cx * 16) * 2;
+    for (let i = 0; i < 16; i++)
+      chunks[chunk][j * 16 + i] = u16(i32(TILEMAPS[from + i * 2]) | (i32(TILEMAPS[from + i * 2 + 1]) << 8));
+  }
+  return chunk;
+}
+
 export function tset(m: I32, x: I32, y: I32, value: I32): void {
   if (x < 0 || y < 0 || x >= TILEMAP_SIZE || y >= TILEMAP_SIZE) return;
-  if (len(overlayKeys) === 0) {
-    overlayKeys = fill(OVERLAY_CAPACITY, -1);
-    overlayTiles = fill(OVERLAY_CAPACITY, 0);
+  const chunk = writableChunk(m, x >> 4, y >> 4, false);
+  if (chunk >= 0) chunks[chunk][((y & 15) << 4) | (x & 15)] = u16(value);
+}
+
+/**
+ * pyxel.tilemaps[m].blt(x, y, src, u, v, w, h, tilekey): copies the w x h
+ * tiles at (u, v) of tilemap src to (x, y) of tilemap m, clipped to both
+ * maps (tilemaps have no camera or clip here). Negative w or h flips; source
+ * tiles equal to key are left out, and -1 leaves none out. A copy within one
+ * tilemap reads its whole source before writing.
+ */
+export function tilemapBlt(m: I32, x: I32, y: I32, src: I32, u: I32, v: I32, w: I32, h: I32, key: I32): void {
+  const aw = w < 0 ? -w : w,
+    ah = h < 0 ? -h : h;
+  // Destination columns x + first .. x + last, whose source columns are in the map too.
+  const first = larger(larger(-x, w < 0 ? u + aw - TILEMAP_SIZE : -u), 0);
+  const lastDst = TILEMAP_SIZE - 1 - x < aw - 1 ? TILEMAP_SIZE - 1 - x : aw - 1;
+  const lastSrc = w < 0 ? u + aw - 1 : TILEMAP_SIZE - 1 - u;
+  const last = lastDst < lastSrc ? lastDst : lastSrc;
+  // Destination rows y + top .. y + bottom likewise.
+  const top = larger(larger(-y, h < 0 ? v + ah - TILEMAP_SIZE : -v), 0);
+  const bottomDst = TILEMAP_SIZE - 1 - y < ah - 1 ? TILEMAP_SIZE - 1 - y : ah - 1;
+  const bottomSrc = h < 0 ? v + ah - 1 : TILEMAP_SIZE - 1 - v;
+  const bottom = bottomDst < bottomSrc ? bottomDst : bottomSrc;
+  if (first > last || top > bottom) return;
+  const self = src === m;
+  // Whole chunks inside both maps share the source's.
+  const aligned = w > 0 && h > 0 && ((x | y | u | v | w | h) & 15) === 0;
+  if (!self && key < 0 && aligned && first === 0 && last === w - 1 && top === 0 && bottom === h - 1) {
+    copyChunks(m, x >> 4, y >> 4, src, u >> 4, v >> 4, w >> 4, h >> 4);
+    return;
   }
-  const index = slot((m << 16) | (y << 8) | x);
-  if (overlayKeys[index] === -1) {
-    // Keep the table at most three quarters full so probes stay short.
-    if (overlayCount * 4 >= OVERLAY_CAPACITY * 3) return;
-    overlayKeys[index] = (m << 16) | (y << 8) | x;
-    overlayCount++;
-  }
-  overlayTiles[index] = value;
+  // Each destination row takes a run of n source tiles from column sx, reversed when flipped.
+  const n = last - first + 1,
+    sx = w < 0 ? u + aw - 1 - last : u + first;
+  const tiles: U16[] = fill(self ? n * ah : n, u16(0));
+  // A copy within one tilemap reads every source row in a first pass; others read each row as they write it.
+  for (let pass = self ? 0 : 1; pass < 2; pass++)
+    for (let j = 0; j < ah; j++) {
+      const sy = v + (h < 0 ? ah - 1 - j : j),
+        ty = y + j,
+        at = self ? j * n : 0;
+      if (sy < 0 || sy >= TILEMAP_SIZE || ty < 0 || ty >= TILEMAP_SIZE) continue;
+      if (pass === 0 || !self) {
+        for (let i = 0; i < n;) {
+          const tx = sx + i,
+            run = 16 - (tx & 15) < n - i ? 16 - (tx & 15) : n - i;
+          const chunk = len(chunkOf) > 0 ? i32(chunkOf[(src << 8) | ((sy >> 4) << 4) | (tx >> 4)]) : -1;
+          if (chunk >= 0) {
+            copyRange(tiles, at + i, chunks[chunk], ((sy & 15) << 4) | (tx & 15), run);
+          } else {
+            const from = src * TILEMAP_BYTES + (sy * TILEMAP_SIZE + tx) * 2;
+            for (let k = 0; k < run; k++)
+              tiles[at + i + k] = u16(i32(TILEMAPS[from + k * 2]) | (i32(TILEMAPS[from + k * 2 + 1]) << 8));
+          }
+          i += run;
+        }
+        if (w < 0)
+          for (let k = 0; k < n >> 1; k++) {
+            const t = tiles[at + k];
+            tiles[at + k] = tiles[at + n - 1 - k];
+            tiles[at + n - 1 - k] = t;
+          }
+      }
+      if (pass === 0) continue;
+      // Write the run chunk by chunk; chunks the copy covers whole need no cartridge tiles.
+      for (let i = 0; i < n;) {
+        const tx = x + first + i,
+          run = 16 - (tx & 15) < n - i ? 16 - (tx & 15) : n - i;
+        const cx = tx >> 4,
+          cy = ty >> 4;
+        const whole =
+          key < 0 &&
+          cx * 16 >= x + first &&
+          cx * 16 + 15 <= x + last &&
+          cy * 16 >= y + top &&
+          cy * 16 + 15 <= y + bottom;
+        const chunk = writableChunk(m, cx, cy, whole);
+        if (chunk >= 0) {
+          const to = ((ty & 15) << 4) | (tx & 15);
+          if (key < 0 || key > 0xffff) copyRange(chunks[chunk], to, tiles, at + i, run);
+          else copyRange(chunks[chunk], to, tiles, at + i, run, u16(key));
+        }
+        i += run;
+      }
+    }
+}
+
+/**
+ * tilemapBlt of whole chunks: w x h chunks from chunk (u, v) of tilemap src
+ * to chunk (x, y) of tilemap m, which share the source's chunks in RAM.
+ */
+function copyChunks(m: I32, x: I32, y: I32, src: I32, u: I32, v: I32, w: I32, h: I32): void {
+  if (len(chunkOf) === 0) chunkOf = fill(8 * 256, i16(-1));
+  for (let j = 0; j < h; j++)
+    for (let i = 0; i < w; i++) {
+      const from = i32(chunkOf[(src << 8) | ((v + j) << 4) | (u + i)]),
+        at = (m << 8) | ((y + j) << 4) | (x + i);
+      if (from >= 0) {
+        if (i32(chunkOf[at]) !== from) useChunk(at, from);
+        continue;
+      }
+      const to = writableChunk(m, x + i, y + j, true);
+      if (to < 0) continue;
+      for (let ty = 0; ty < 16; ty++) {
+        const at = src * TILEMAP_BYTES + (((v + j) * 16 + ty) * TILEMAP_SIZE + (u + i) * 16) * 2;
+        for (let tx = 0; tx < 16; tx++)
+          chunks[to][ty * 16 + tx] = u16(i32(TILEMAPS[at + tx * 2]) | (i32(TILEMAPS[at + tx * 2 + 1]) << 8));
+      }
+    }
 }
 
 export function setTilemapImage(m: I32, img: I32): void {
@@ -1037,9 +1179,9 @@ function tilesToScreen(m: I32, img: I32, key: I32): void {
       rows = (bottom - ty * 8 < 7 ? bottom - ty * 8 : 7) - top + 1;
     const rowStart = (copyDstY + ty * 8 + top - copySrcY) * width + copyDstX - copySrcX;
     for (let tx = copySrcX >> 3; tx <= right >> 3; tx++) {
-      // copyArea keeps (tx, ty) inside the map, so only overlay tiles need tget.
+      // copyArea keeps (tx, ty) inside the map, so only tiles written at run time need tget.
       const at = m * TILEMAP_BYTES + (ty * TILEMAP_SIZE + tx) * 2;
-      const value = overlayCount > 0 ? tget(m, tx, ty) : i32(TILEMAPS[at]) | (i32(TILEMAPS[at + 1]) << 8);
+      const value = len(chunkOf) > 0 ? tget(m, tx, ty) : i32(TILEMAPS[at]) | (i32(TILEMAPS[at + 1]) << 8);
       // Tiles name 8 x 8 cells of a 256 x 256 image; others draw nothing.
       const cx = value & 255,
         cy = value >> 8;
