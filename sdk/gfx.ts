@@ -1749,6 +1749,19 @@ export function bltm(s: I32, x: I32, y: I32, m: I32, u: I32, v: I32, w: I32, h: 
     if (dithered) restoreUnder(copyDstX, copyDstY, copyW, copyH);
     return;
   }
+  if (
+    s < SCREEN &&
+    img < SCREEN &&
+    len(banks[img]) === 0 &&
+    copySignX > 0 &&
+    copySignY > 0 &&
+    palIdentity[s] &&
+    ditherMask[s] === ALL_PIXELS
+  ) {
+    refreshCells(img);
+    tilesToBank(s, m, img, blockKey(key));
+    return;
+  }
   for (let yi = 0; yi < copyH; yi++) {
     const ty = copySrcY + copySignY * yi + copyOffY;
     for (let xi = 0; xi < copyW; xi++) {
@@ -1844,6 +1857,43 @@ function tilesToScreenMapped(m: I32, img: I32, key: I32): void {
         si = (cy * 8 + top) * IMAGE_SIZE + cx * 8 + left;
       if (color !== MIXED) fillRect(screen, di, width, cols, rows, palMap[SCREEN * 256 + color]);
       else blockToScreenMapped(img, si, di, cols, rows, 1, IMAGE_SIZE, key);
+    }
+  }
+}
+
+/**
+ * The copy window of an unflipped bltm into image bank s, one block per
+ * tile, as tilesToScreen draws on the screen. The tiles' image is still
+ * cartridge data: a bank in RAM, as a source inside the target's array of
+ * banks, would be copied for every block.
+ */
+function tilesToBank(s: I32, m: I32, img: I32, key: I32): void {
+  const right = copySrcX + copyW - 1,
+    bottom = copySrcY + copyH - 1;
+  for (let ty = copySrcY >> 3; ty <= bottom >> 3; ty++) {
+    const top = copySrcY > ty * 8 ? copySrcY - ty * 8 : 0,
+      rows = (bottom - ty * 8 < 7 ? bottom - ty * 8 : 7) - top + 1;
+    const rowStart = (copyDstY + ty * 8 + top - copySrcY) * IMAGE_SIZE + copyDstX - copySrcX;
+    for (let tx = copySrcX >> 3; tx <= right >> 3; tx++) {
+      const value = tget(m, tx, ty);
+      const cx = value & 255,
+        cy = value >> 8;
+      if (cx >= 32 || cy >= 32) continue;
+      let color = i32(cellColors[img * 1024 + cy * 32 + cx]);
+      if (color === UNKNOWN) color = measureCell(img, cx, cy);
+      if (color === key) continue;
+      const left = copySrcX > tx * 8 ? copySrcX - tx * 8 : 0,
+        cols = (right - tx * 8 < 7 ? right - tx * 8 : 7) - left + 1;
+      const di = rowStart + tx * 8 + left,
+        si = img * BANK_BYTES + (cy * 8 + top) * IMAGE_SIZE + cx * 8 + left;
+      // Row by row: copyRect takes no element of an array of arrays.
+      for (let j = 0; j < rows; j++) {
+        const to = di + j * IMAGE_SIZE,
+          from = si + j * IMAGE_SIZE;
+        if (color !== MIXED) fillRange(banks[s], to, to + cols, u8(color));
+        else if (key < 0) copyRange(banks[s], to, IMAGES, from, cols);
+        else copyRange(banks[s], to, IMAGES, from, cols, u8(key));
+      }
     }
   }
 }
