@@ -8,6 +8,7 @@ import {
   NUM_CHANNELS,
   NUM_SOUNDS,
   play as audioPlay,
+  playSound as audioPlaySound,
   playingNote as audioPlayingNote,
   playingSound as audioPlayingSound,
   setMml,
@@ -39,7 +40,7 @@ export function mml(snd: I32, code: string): void {
 
 /** Plays sound `snd` on channel `ch`; resume returns to what the channel played after it. */
 export function play(ch: I32, snd: I32, loop: boolean = false, resume: boolean = false): void {
-  audioPlay(ch, [snd], loop, resume);
+  audioPlaySound(ch, snd, loop, resume);
 }
 
 /** Plays a list of sounds in order on channel `ch`. */

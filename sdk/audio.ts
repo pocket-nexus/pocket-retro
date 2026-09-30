@@ -143,6 +143,8 @@ interface Channel {
   /** The same time in 1/256 of the note's ticks, and its step per audio tick. */
   noteFine: I32;
   fineStep: I32;
+  /** The clocks per tick fineStep was worked out for, or UNSET. */
+  fineTempo: I32;
   /** Ticks the voice has sounded since play(), in 1/256 ticks; drives undelayed vibrato. */
   playback: I32;
 }
@@ -185,6 +187,7 @@ function newChannel(): Channel {
     noteElapsed: 0,
     noteFine: 0,
     fineStep: 0,
+    fineTempo: UNSET,
     playback: 0,
   };
 }
@@ -358,6 +361,28 @@ function command(n: I32, i: I32): I32 {
  */
 export function play(ch: I32, sounds: I32[], loop: boolean, resume: boolean): void {
   if (ch < 0 || ch >= NUM_CHANNELS || len(sounds) === 0) return;
+  savePlaylist(ch, resume);
+  startPlaylist(ch, sounds, loop);
+  restartVoice(ch);
+}
+
+/**
+ * play(ch, [snd], loop, resume). A sound effect replayed every frame keeps
+ * its one-sound list: building and copying lists costs several allocations.
+ */
+export function playSound(ch: I32, snd: I32, loop: boolean, resume: boolean): void {
+  if (ch < 0 || ch >= NUM_CHANNELS) return;
+  if (len(channels[ch].sounds) !== 1 || channels[ch].sounds[0] !== snd) {
+    play(ch, [snd], loop, resume);
+    return;
+  }
+  savePlaylist(ch, resume);
+  restartPlaylist(ch, loop);
+  restartVoice(ch);
+}
+
+/** With resume, keeps the playlist the channel plays to continue after the new one. */
+function savePlaylist(ch: I32, resume: boolean): void {
   if (resume) {
     if (!channels[ch].saved && channels[ch].playing) {
       channels[ch].saved = true;
@@ -370,7 +395,9 @@ export function play(ch: I32, sounds: I32[], loop: boolean, resume: boolean): vo
     channels[ch].saved = false;
     channels[ch].playClock = 0;
   }
-  startPlaylist(ch, sounds, loop);
+}
+
+function restartVoice(ch: I32): void {
   channels[ch].remaining = 0;
   channels[ch].lastPitch = UNSET;
   channels[ch].playback = 0;
@@ -378,6 +405,11 @@ export function play(ch: I32, sounds: I32[], loop: boolean, resume: boolean): vo
 
 function startPlaylist(ch: I32, sounds: I32[], loop: boolean): void {
   channels[ch].sounds = sounds;
+  restartPlaylist(ch, loop);
+}
+
+/** Starts the channel's playlist over. */
+function restartPlaylist(ch: I32, loop: boolean): void {
   channels[ch].loop = loop;
   channels[ch].sound = 0;
   channels[ch].command = 0;
@@ -586,6 +618,7 @@ function selectGlide(c: I32, slot: I32): void {
 }
 
 function centsTo64ths(cents: I32): I32 {
+  if (cents === 0) return 0;
   const scaled = cents * 16;
   return scaled >= 0 ? idiv(scaled + 12, 25) : -idiv(-scaled + 12, 25);
 }
@@ -754,13 +787,21 @@ function startNote(c: I32, midi: I32, ticks: I32, half: I32): void {
   channels[c].noteOn = true;
   channels[c].notePitch = pitch;
   channels[c].noteVolume = channels[c].volume;
-  // Gate clocks: clocks * gate / 100, rounded, without overflowing.
-  channels[c].noteGate = idiv(clocks, 100) * channels[c].gate + idiv((clocks % 100) * channels[c].gate + 50, 100);
+  // Gate clocks: clocks * gate / 100, rounded, without overflowing. The GBA
+  // divides in software, so the common cases below skip divisions.
+  const gate = channels[c].gate;
+  channels[c].noteGate = gate === 100 ? clocks : idiv(clocks, 100) * gate + idiv((clocks % 100) * gate + 50, 100);
   channels[c].noteElapsed = -channels[c].remaining;
   // Tick time advances by a fixed step per audio tick, so ticks cost no division.
   const elapsed = channels[c].noteElapsed;
-  channels[c].noteFine = idiv(elapsed, perTick) * 256 + idiv((elapsed % perTick) * 256, perTick);
-  channels[c].fineStep = idiv(TICK_CLOCKS * 256, perTick);
+  if (elapsed === 0) channels[c].noteFine = 0;
+  else if (elapsed > -perTick && elapsed < perTick && perTick < 8388608)
+    channels[c].noteFine = idiv(elapsed * 256, perTick);
+  else channels[c].noteFine = idiv(elapsed, perTick) * 256 + idiv((elapsed % perTick) * 256, perTick);
+  if (channels[c].fineTempo !== perTick) {
+    channels[c].fineStep = idiv(TICK_CLOCKS * 256, perTick);
+    channels[c].fineTempo = perTick;
+  }
   channels[c].lastPitch = pitch;
   channels[c].remaining += clocks;
   channels[c].soundClock += clocks;
@@ -808,7 +849,9 @@ function emitVoice(c: I32, t: I32): void {
   const tick = fine >> 8;
   const tone = channels[c].tone;
   const level = envelope(c, fine);
-  const amp = idiv(idiv(TONE_AMP[tone] * level, 127) * channels[c].noteVolume, 1048576);
+  // At full level, TONE_AMP[tone] * level / 127 is TONE_AMP[tone] * 256.
+  const scaled = level === FULL_LEVEL ? TONE_AMP[tone] * 256 : idiv(TONE_AMP[tone] * level, 127);
+  const amp = idiv(scaled * channels[c].noteVolume, 1048576);
   const pitch = channels[c].notePitch + vibrato(c, tick) + glide(c, tick);
   pushVoice(tone, step(pitch, tone), amp);
   channels[c].playback += channels[c].fineStep;
@@ -855,7 +898,7 @@ function vibrato(c: I32, tick: I32): I32 {
 function glide(c: I32, tick: I32): I32 {
   if (!channels[c].glideOn) return 0;
   const ticks = channels[c].glideTicks;
-  if (ticks <= 0 || tick >= ticks) return 0;
+  if (ticks <= 0 || tick >= ticks || channels[c].glideOffset === 0) return 0;
   return idiv(channels[c].glideOffset * (ticks - tick), ticks);
 }
 
