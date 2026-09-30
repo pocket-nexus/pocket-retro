@@ -205,7 +205,13 @@ fields). `late` must stay 0 after the first second. If it does not:
    `--within=<function>` for the hottest addresses of a function.
 2. Fix the game first: floats in per-entity loops, copies of arrays in hot
    code (`for…of` over big arrays of structs, passing arrays), per-pixel
-   `pset` loops that a `rect`, `blt` or `bltm` could do.
+   `pset` loops that a `rect`, `blt` or `bltm` could do. Lists filtered every
+   frame are cheaper compacted in place (copy the survivors down, then
+   `truncate`) than rebuilt by `filter` (Mega Wing: 15,000 cycles a frame for
+   four lists). Watch `game`'s max as well as its mean: work that lines up
+   on the same frames, such as enemies that all fire on multiples of 10
+   frames, makes them late; compute `math.sin`, `cos` and `atan2` (thousands
+   of cycles each) once for angles that never change.
 3. If the SDK is the bottleneck, improve `sdk/` for every game and follow
    the performance rules in `AGENTS.md` (`@iwram`, IWRAM budget, array
    builtins). Compare changes by the mean `game` value over the same script,
