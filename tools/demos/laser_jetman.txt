@@ -1,0 +1,5 @@
+# Walks and flies, firing: lasers, two rescue beams and an explosion, the score going from 500 to 1200.
+# skip: 400
+260:- 5:START 125:- 30:RIGHT 30:RIGHT 60:- 60:RIGHT+A 60:RIGHT+A 30:UP+RIGHT
+60:RIGHT 60:RIGHT+A 60:- 30:A 30:A 30:UP+A 30:UP+RIGHT+A 30:RIGHT+A 30:RIGHT+A
+30:RIGHT 30:RIGHT+A 30:LEFT+A 30:LEFT+A 30:A 30:A
