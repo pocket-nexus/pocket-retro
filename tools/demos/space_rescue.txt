@@ -1,0 +1,7 @@
+# Four rescues among 8 to 11 meteors. Found by a planner that read the game's state and played ahead.
+# skip: 2400
+60:- 4:START 2:- 52:A 550:- 146:A 2:- 154:A 50:- 56:A 80:- 2:A 36:- 8:A 34:-
+74:A 2:- 2:A 2:- 38:A 146:- 202:A 54:- 2:A 12:- 28:A 78:- 2:A 6:- 14:A 12:-
+2:A 22:- 20:A 26:- 76:A 4:- 118:A 2:- 300:A 16:- 26:A 72:- 6:A 2:- 42:A 136:-
+64:A 68:- 2:A 16:- 16:A 116:- 12:A 12:- 14:A 10:- 24:A 8:- 26:A 6:- 4:A 10:-
+112:A

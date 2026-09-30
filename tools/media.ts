@@ -4,14 +4,14 @@
  * few seconds of a game on its own screen, and showcase.gif, clips of
  * several games on a pixel-art Game Boy Advance.
  *
- *   bun tools/media.ts                  every game in DEMOS and the showcase
+ *   bun tools/media.ts                  every game in tools/demos and the showcase
  *   bun tools/media.ts jump snake       only these games' GIFs
  *   bun tools/media.ts --showcase       only the showcase
  *
  * Games are built first. The emulator is deterministic, so a demo records
  * the same GIF every time until the game or the SDK changes.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildGame, ROOT } from "./build.ts";
 import { Gba, SCREEN_HEIGHT, SCREEN_WIDTH } from "./emu/mgba.ts";
@@ -25,41 +25,19 @@ interface Demo {
   skip: number;
 }
 
-/** What each game's GIF shows. */
-const DEMOS: Record<string, Demo> = {
-  jump: {
-    script: "20:- 42:LEFT 58:RIGHT 74:LEFT 62:RIGHT 8:LEFT 26:RIGHT 72:LEFT 64:RIGHT 54:LEFT 48:RIGHT 24:- 38:RIGHT",
-    skip: 30,
-  },
-  // Seven apples; the display is black until VBlank 28.
-  snake: {
-    script: "23:- 63:RIGHT 6:UP 30:RIGHT 96:DOWN 102:LEFT 21:DOWN 78:RIGHT 117:UP 21:LEFT 27:DOWN 9:RIGHT 15:DOWN",
-    skip: 28,
-  },
-  // The ship fires when A goes down, so A is tapped.
-  shooter: {
-    script:
-      "34:- 2:START 2:A 2:- 4:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 4:LEFT 2:UP 2:A+UP 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+UP 6:UP 2:A+UP 4:UP 2:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 2:LEFT 4:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 6:RIGHT 2:A+RIGHT 2:RIGHT 4:UP 2:A+UP 6:UP 2:A+UP 6:UP 2:A+UP 6:UP 2:A+UP 2:UP 4:- 2:A 2:- 4:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 7:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 2:A+LEFT 6:LEFT 1:A+UP",
-    skip: 60,
-  },
-  platformer: {
-    script:
-      "26:- 108:RIGHT 2:RIGHT+A 18:RIGHT 2:RIGHT+A 94:RIGHT 2:RIGHT+A 6:RIGHT 2:RIGHT+A 14:RIGHT 2:RIGHT+A 86:RIGHT 8:- 2:RIGHT+A 86:RIGHT 2:RIGHT+A 50:RIGHT 2:RIGHT+A 118:RIGHT",
-    skip: 60,
-  },
-  // Found by a planner that read the game's state and played ahead: four rescues among 8-11 meteors.
-  space_rescue: {
-    script:
-      "60:- 4:START 2:- 52:A 550:- 146:A 2:- 154:A 50:- 56:A 80:- 2:A 36:- 8:A 34:- 74:A 2:- 2:A 2:- 38:A 146:- 202:A 54:- 2:A 12:- 28:A 78:- 2:A 6:- 14:A 12:- 2:A 22:- 20:A 26:- 76:A 4:- 118:A 2:- 300:A 16:- 26:A 72:- 6:A 2:- 42:A 136:- 64:A 68:- 2:A 16:- 16:A 116:- 12:A 12:- 14:A 10:- 24:A 8:- 26:A 6:- 4:A 10:- 112:A",
-    skip: 2400,
-  },
-  // From the Rear Ward at 3 HP into the Secret Gardens, a potion, dusk and night, and the castle key.
-  daylight: {
-    script:
-      "60:- 5:START 25:- 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+LEFT 6:B+LEFT 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+RIGHT 6:B+RIGHT 6:A+DOWN 6:DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:LEFT 6:A+DOWN 6:B+DOWN 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+LEFT 6:B+LEFT 6:A+UP 6:B+UP 6:A+LEFT 6:B+LEFT 6:A+UP 6:B+UP 6:A+LEFT 6:B+LEFT 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+RIGHT 6:B+RIGHT 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+UP 6:UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+UP 6:B+UP 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+UP 6:B+UP 6:A+RIGHT 6:B+RIGHT 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+DOWN 6:B+DOWN 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+DOWN 6:B+DOWN 6:A+LEFT 6:B+LEFT 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+DOWN 6:B+DOWN 6:A+LEFT 6:B+LEFT 6:A+DOWN 6:B+DOWN 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+DOWN 6:B+DOWN 6:A+DOWN 6:B+DOWN 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+LEFT 6:B+LEFT 6:A+UP 6:B+UP 6:A+LEFT 6:B+LEFT 6:A+UP 6:B+UP 6:A+LEFT 6:B+LEFT 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+LEFT 6:B+LEFT 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+UP 6:B+UP 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+DOWN 6:B+DOWN 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+UP 6:B+UP 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+RIGHT 6:B+RIGHT 6:A+UP 6:UP 66:-",
-    skip: 1200,
-  },
-};
+/**
+ * What each game's GIF shows, from tools/demos/<game>.txt: `#` lines are
+ * comments, `# skip: N` sets the VBlanks played before recording starts, and
+ * the other lines are the script.
+ */
+function readDemo(game: string): Demo {
+  const path = resolve(DEMOS, `${game}.txt`);
+  if (!existsSync(path)) throw new Error(`no demo for ${game}: add tools/demos/${game}.txt`);
+  const lines = readFileSync(path, "utf8").split("\n");
+  const skip = lines.map((line) => line.match(/^#\s*skip:\s*(\d+)/)).find(Boolean);
+  const script = lines.filter((line) => !line.startsWith("#")).join(" ");
+  return { script, skip: skip ? Number(skip[1]) : 0 };
+}
 
 /** Clips of the showcase: a game's demo from its skip, for this many VBlanks. */
 const SHOWCASE: { game: string; vblanks: number }[] = [
@@ -72,6 +50,7 @@ const SHOWCASE: { game: string; vblanks: number }[] = [
 /** Every other VBlank: 30 images a second, GIF delays of 3 and 4 centiseconds. */
 const STEP = 2;
 const ASSETS = resolve(ROOT, "docs/assets");
+const DEMOS = resolve(ROOT, "tools/demos");
 
 interface Capture {
   /** Whole 240 x 160 displays, RGBA. */
@@ -107,9 +86,7 @@ async function capture(game: string, demo: Demo, vblanks = Infinity): Promise<Ca
 }
 
 async function recordGame(game: string): Promise<void> {
-  const demo = DEMOS[game];
-  if (!demo) throw new Error(`no demo for ${game} in tools/media.ts`);
-  const { frames, width, height } = await capture(game, demo);
+  const { frames, width, height } = await capture(game, readDemo(game));
   const rect = screenRect(width, height);
   const gif = encodeGif(
     frames.map((frame) => ({ rgba: crop(frame, rect), duration: STEP / REFRESH_RATE })),
@@ -278,7 +255,7 @@ async function recordShowcase(): Promise<void> {
   const blank = new Uint8Array(SCREEN_WIDTH * SCREEN_HEIGHT * 4);
   for (let i = 3; i < blank.length; i += 4) blank[i] = 255;
   for (const clip of SHOWCASE) {
-    const { frames: clipFrames } = await capture(clip.game, DEMOS[clip.game]!, clip.vblanks);
+    const { frames: clipFrames } = await capture(clip.game, readDemo(clip.game), clip.vblanks);
     // A few dark frames between games, as when a cartridge is changed.
     for (let i = 0; i < 4; i++) show(blank);
     clipFrames.forEach(show);
@@ -299,6 +276,7 @@ if (import.meta.main) {
   const games = args.filter((arg) => !arg.startsWith("--"));
   const showcaseOnly = args.includes("--showcase");
   mkdirSync(resolve(ASSETS, "games"), { recursive: true });
-  if (!showcaseOnly) for (const game of games.length > 0 ? games : Object.keys(DEMOS)) await recordGame(game);
+  const all = readdirSync(DEMOS).map((file) => file.replace(/\.txt$/, ""));
+  if (!showcaseOnly) for (const game of games.length > 0 ? games : all) await recordGame(game);
   if (showcaseOnly || games.length === 0) await recordShowcase();
 }

@@ -1,0 +1,4 @@
+# Crosses the field and eats seven apples. The display is black until VBlank 28.
+# skip: 28
+23:- 63:RIGHT 6:UP 30:RIGHT 96:DOWN 102:LEFT 21:DOWN 78:RIGHT 117:UP 21:LEFT
+27:DOWN 9:RIGHT 15:DOWN

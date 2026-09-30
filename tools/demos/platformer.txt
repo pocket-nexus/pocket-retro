@@ -1,0 +1,5 @@
+# Runs right with the camera scrolling, jumping up ledges and past enemies.
+# skip: 60
+26:- 108:RIGHT 2:RIGHT+A 18:RIGHT 2:RIGHT+A 94:RIGHT 2:RIGHT+A 6:RIGHT
+2:RIGHT+A 14:RIGHT 2:RIGHT+A 86:RIGHT 8:- 2:RIGHT+A 86:RIGHT 2:RIGHT+A
+50:RIGHT 2:RIGHT+A 118:RIGHT

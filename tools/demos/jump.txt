@@ -1,0 +1,4 @@
+# Bounces left and right across many floors, eating fruit: the score goes from 0 to 1960.
+# skip: 30
+20:- 42:LEFT 58:RIGHT 74:LEFT 62:RIGHT 8:LEFT 26:RIGHT 72:LEFT 64:RIGHT
+54:LEFT 48:RIGHT 24:- 38:RIGHT
