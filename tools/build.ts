@@ -113,8 +113,12 @@ impl Game for Model {
 #[no_mangle]
 extern "C" fn retro_game_main() -> ! {
     // The model and its first small arrays go to IWRAM, within 1.5 KiB, leaving
-    // room for the screen, which the host moves there after boot.
-    let model = pocket_retro_gba::memory::in_iwram_up_to(512, 1536, AppModel::default);
+    // room for the screen, which the host moves there after boot. Where tagged
+    // code leaves less, the arrays give way to a 160 x 120 screen if it fits.
+    let (_, size) = pocket_retro_gba::memory::iwram_heap();
+    let screen = 160 * 120 + 64 + core::mem::size_of::<AppModel>();
+    let budget = if size >= screen { (size - screen).min(1536) } else { 1536 };
+    let model = pocket_retro_gba::memory::in_iwram_up_to(512, budget, AppModel::default);
     let mut game = Model(pocket_retro_gba::memory::in_iwram(|| alloc::boxed::Box::new(model)));
     pocket_retro_gba::log!("model {} bytes", core::mem::size_of::<AppModel>());
     pocket_retro_gba::run(&mut game)

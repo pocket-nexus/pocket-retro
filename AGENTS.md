@@ -103,7 +103,8 @@ ROM with late frames can be torn: the page flip happened mid-display.
 - IWRAM (32 KiB) is shared, in this order, by tagged code, the model struct
   (one field per module-level `let` of the SDK and the game, 12 bytes per
   array), arrays of at most 512 bytes created with the model (up to 1.5 KiB
-  in all; arrays created later, as in `setup()`, go to EWRAM), and last the
+  in all, less when tagged code leaves too little room for a 160 x 120
+  screen; arrays created later, as in `setup()`, go to EWRAM), and last the
   screen, moved there after boot if it still fits. A screen in EWRAM makes
   `present` and every draw about a third slower; screens over about 20 KB
   (200 x 150) never fit. `tests/games.test.ts` requires screens up to
