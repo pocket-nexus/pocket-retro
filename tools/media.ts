@@ -187,50 +187,45 @@ interface Console {
 
 /** A Game Boy Advance in the logo's colors, its display left transparent. */
 function drawConsole(): Console {
-  const canvas = new Canvas(420, 240);
-  const bodyX = 6,
-    bodyY = 8,
-    bodyW = 408,
-    bodyH = 224;
+  const canvas = new Canvas(372, 220);
+  const bodyX = 4,
+    bodyY = 3,
+    bodyW = 364,
+    bodyH = 212;
   const screenX = bodyX + (bodyW - SCREEN_WIDTH) / 2,
-    screenY = bodyY + 16;
-  // Shoulder buttons, then the body with its outline, lit top and shaded bottom.
-  canvas.round(bodyX + 22, bodyY - 5, 92, 24, 8, INK);
-  canvas.round(bodyX + bodyW - 114, bodyY - 5, 92, 24, 8, INK);
-  canvas.round(bodyX + 23, bodyY - 4, 90, 22, 7, SHADE);
-  canvas.round(bodyX + bodyW - 113, bodyY - 4, 90, 22, 7, SHADE);
-  canvas.round(bodyX + 2, bodyY + 3, bodyW, bodyH, 56, INK);
-  canvas.round(bodyX - 1, bodyY - 1, bodyW + 2, bodyH + 2, 57, INK);
-  canvas.round(bodyX, bodyY, bodyW, bodyH, 56, BODY);
+    screenY = bodyY + 20;
+  // The body with its outline and shadow, a lit top and a shaded bottom.
+  canvas.round(bodyX + 2, bodyY + 3, bodyW, bodyH, 44, INK);
+  canvas.round(bodyX - 1, bodyY - 1, bodyW + 2, bodyH + 2, 45, INK);
+  canvas.round(bodyX, bodyY, bodyW, bodyH, 44, BODY);
   for (let dy = 1; dy <= 4; dy++) canvas.edge(BODY, SHADE, dy);
   canvas.edge(BODY, LIGHT, -1);
   canvas.edge(BODY, LIGHT, -2);
   // Bezel, power light and label.
-  canvas.round(screenX - 14, screenY - 12, SCREEN_WIDTH + 28, SCREEN_HEIGHT + 36, 10, BEZEL);
-  canvas.circle(screenX - 6, screenY + 20, 2, LED);
-  canvas.set(screenX - 7, screenY + 19, WHITE);
+  canvas.round(screenX - 8, screenY - 8, SCREEN_WIDTH + 16, SCREEN_HEIGHT + 28, 8, BEZEL);
+  canvas.circle(screenX - 4, screenY + 16, 1, LED);
   const label = [WHITE, WHITE, WHITE, WHITE, LIGHT, LIGHT, BODY];
   const sunset = [0xe9c35b, 0xe9c35b, 0xd38441, 0xd38441, RED, RED, 0x7e2072];
   const labelX = screenX + (SCREEN_WIDTH - 12 * 7) / 2,
-    labelY = screenY + SCREEN_HEIGHT + 8;
+    labelY = screenY + SCREEN_HEIGHT + 6;
   canvas.text(labelX, labelY, "POCKET", label);
   canvas.text(labelX + 7 * 7, labelY, "RETRO", sunset);
   // D-pad, Start and Select on the left wing.
-  const padX = bodyX + 38,
+  const padX = bodyX + 28,
     padY = bodyY + 84;
   canvas.round(padX - 21, padY - 8, 43, 17, 3, INK);
   canvas.round(padX - 8, padY - 21, 17, 43, 3, INK);
   canvas.rect(padX - 19, padY - 6, 39, 13, KEYS);
   canvas.rect(padX - 6, padY - 19, 13, 39, KEYS);
   canvas.circle(padX, padY, 3, BEZEL);
-  for (const y of [padY + 64, padY + 80]) {
-    canvas.round(bodyX + 30, y - 1, 18, 7, 3, INK);
-    canvas.round(bodyX + 31, y, 16, 5, 2, KEYS);
+  for (const y of [padY + 48, padY + 62]) {
+    canvas.round(padX - 9, y - 1, 18, 7, 3, INK);
+    canvas.round(padX - 8, y, 16, 5, 2, KEYS);
   }
-  // A and B on the right wing, then the speaker.
+  // A and B on the right wing, clear of the bezel, then the speaker.
   for (const [x, y] of [
-    [bodyX + bodyW - 30, padY - 12],
-    [bodyX + bodyW - 58, padY + 8],
+    [bodyX + bodyW - 18, padY - 10],
+    [bodyX + bodyW - 40, padY + 10],
   ] as const) {
     canvas.circle(x + 1, y + 2, 11, SHADE);
     canvas.circle(x, y, 11, INK);
@@ -238,7 +233,7 @@ function drawConsole(): Console {
     canvas.circle(x - 3, y - 3, 2, PINK);
   }
   for (let j = 0; j < 4; j++)
-    for (let i = 0; i < 5 - j; i++) canvas.circle(bodyX + bodyW - 52 + i * 8 + j * 4, bodyY + 158 + j * 8, 1, SHADE);
+    for (let i = 0; i < 5 - j; i++) canvas.circle(bodyX + bodyW - 44 + i * 8 + j * 4, bodyY + 150 + j * 8, 1, SHADE);
   return { canvas, screenX, screenY };
 }
 

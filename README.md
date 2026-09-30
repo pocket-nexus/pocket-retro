@@ -19,7 +19,7 @@
 [How it works](#how-it-works) ·
 [Acknowledgements](#acknowledgements)
 
-<img src="docs/assets/showcase.gif" alt="Mega Wing, Megaball, Cursed Caverns, Laser Jetman, 30 Seconds of Daylight and Pyxel Jump running one after another on a pixel-art Game Boy Advance">
+<img src="docs/assets/showcase.gif" width="558" alt="Mega Wing, Megaball, Cursed Caverns, Laser Jetman, 30 Seconds of Daylight and Pyxel Jump running one after another on a pixel-art Game Boy Advance">
 
 </div>
 
