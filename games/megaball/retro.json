@@ -1,0 +1,7 @@
+{
+  "title": "Megaball",
+  "code": "MBAL",
+  "resources": "assets/my_resource.pyxres",
+  "images": [{ "bank": 0, "x": 0, "y": 0, "file": "assets/img0.png" }],
+  "iwram": "screen"
+}

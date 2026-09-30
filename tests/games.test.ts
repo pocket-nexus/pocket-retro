@@ -41,6 +41,8 @@ const SCRIPTS: Record<string, string> = {
   cursed_caverns: "120:- 5:START 88:- 4:RIGHT+A 230:RIGHT 200:- 5:START 60:-",
   // START once the title is drawn (VBlank 241), rescue the first human, then shoot and fly.
   laser_jetman: "260:- 5:START 125:- 30:RIGHT 90:- 40:RIGHT+A 40:UP+RIGHT 40:LEFT+A 60:-",
+  // START GAME, roll into walls (the screen shakes) and lights, fire the weapon, then wait among the spinners.
+  megaball: "120:- 5:START 60:- 5:A 300:- 60:RIGHT 60:DOWN 60:LEFT+UP 60:A 60:RIGHT+A 60:UP 300:-",
 };
 
 const games = readdirSync(resolve(ROOT, "games"), { withFileTypes: true })
