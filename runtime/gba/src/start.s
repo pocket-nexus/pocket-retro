@@ -202,79 +202,62 @@ __aeabi_memcpy8:
 
 @ r0 = destination, r1 = source, r2 = byte count; copies forward.
 retro_copy:
-    eor r3, r0, r1
-    tst r3, #3
-    bne copy_shifted
+    eor r12, r0, r1
 copy_align:
     cmp r2, #0
     bxeq lr
     tst r0, #3
-    beq copy_words
+    beq copy_aligned
     ldrb r3, [r1], #1
     strb r3, [r0], #1
     sub r2, r2, #1
     b copy_align
-copy_words:
+copy_aligned:
+    tst r12, #3
+    bne copy_shifted
     push {r4-r10}
 copy_blocks:
-    cmp r2, #32
-    blo copy_restore
-    ldmia r1!, {r3-r10}
-    stmia r0!, {r3-r10}
-    sub r2, r2, #32
-    b copy_blocks
-copy_restore:
+    subs r2, r2, #32
+    ldmhs r1!, {r3-r10}
+    stmhs r0!, {r3-r10}
+    bhs copy_blocks
+    add r2, r2, #32
     pop {r4-r10}
 copy_word:
-    cmp r2, #4
-    blo copy_bytes
-    ldr r3, [r1], #4
-    str r3, [r0], #4
-    sub r2, r2, #4
-    b copy_word
+    subs r2, r2, #4
+    ldrhs r3, [r1], #4
+    strhs r3, [r0], #4
+    bhs copy_word
+    add r2, r2, #4
 copy_bytes:
-    cmp r2, #0
-    bxeq lr
-    ldrb r3, [r1], #1
-    strb r3, [r0], #1
-    sub r2, r2, #1
-    b copy_bytes
+    subs r2, r2, #1
+    ldrbhs r3, [r1], #1
+    strbhs r3, [r0], #1
+    bhi copy_bytes
+    bx lr
 
-@ Source and destination differ in alignment: bytes until the destination
-@ is aligned, then each word is put together from two aligned source words,
-@ about four times as fast as bytes. Reading a whole source word may read up
-@ to three bytes past either end of the source, which the GBA allows.
+@ The destination is word aligned and the source is not: each word stored
+@ joins parts of two aligned source words, which costs half as much as
+@ copying bytes.
 copy_shifted:
-    cmp r2, #8
-    blo copy_bytes
-shifted_align:
-    tst r0, #3
-    beq shifted_words
-    ldrb r3, [r1], #1
-    strb r3, [r0], #1
-    sub r2, r2, #1
-    b shifted_align
-shifted_words:
-    push {r4-r6}
+    push {r4, r5}
     and r12, r1, #3
     bic r1, r1, #3
     mov r12, r12, lsl #3
-    rsb r6, r12, #32
+    rsb r5, r12, #32
     ldr r3, [r1], #4
-shifted_loop:
-    cmp r2, #4
-    blo shifted_done
-    ldr r4, [r1], #4
-    mov r5, r3, lsr r12
-    orr r5, r5, r4, lsl r6
-    str r5, [r0], #4
-    mov r3, r4
-    sub r2, r2, #4
-    b shifted_loop
-shifted_done:
-    sub r1, r1, #4
-    add r1, r1, r12, lsr #3
-    pop {r4-r6}
+shifted_words:
+    subs r2, r2, #4
+    ldrhs r4, [r1], #4
+    movhs r3, r3, lsr r12
+    orrhs r3, r3, r4, lsl r5
+    strhs r3, [r0], #4
+    movhs r3, r4
+    bhs shifted_words
+    add r2, r2, #4
+    @ The next source byte lies in the last word read, r5 / 8 bytes from its end.
+    sub r1, r1, r5, lsr #3
+    pop {r4, r5}
     b copy_bytes
 
 .global memmove
