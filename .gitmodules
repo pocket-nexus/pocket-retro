@@ -1,0 +1,4 @@
+[submodule "pocketjs"]
+	path = pocketjs
+	url = https://github.com/pocket-nexus/pocketjs.git
+	branch = main

@@ -19,6 +19,7 @@ JavaScript engine and no Python on the device.
 | `tools/lib/`    | `.pyxres`/`.pyxpal` reader, asset baker, ROM packer, IWRAM placement, PNG and zip codecs          |
 | `tools/emu/`    | Headless mGBA: `setup.ts` builds `libmgba` + `shim.c`, `mgba.ts` binds it                         |
 | `skills/`       | Agent skills; `port-pyxel-game` is the procedure for porting a game (`.claude/skills` links here) |
+| `pocketjs/`     | PocketJS, a git submodule: the MicroTS compiler, `@pocketjs/framework` and the `microts` crate    |
 
 To port a game, follow `skills/port-pyxel-game/SKILL.md`.
 
@@ -28,10 +29,9 @@ crate), `dist/<game>.gba` and `.elf`, `.cache/` (mGBA, cargo target).
 ## Prerequisites
 
 - Bun, and `bun install` in this repository (installs the lefthook hooks).
-- PocketJS checkout at `../pocketjs` (override with `POCKETJS_ROOT`) on the
-  branch `feat/microts-game-subset`, with `bun install` run there. The branch
-  carries the MicroTS extensions this project needs and is proposed upstream
-  as pocket-nexus/pocketjs#492.
+- PocketJS in the `pocketjs` submodule: `git submodule update --init`, then
+  `bun install` in `pocketjs/`. `POCKETJS_ROOT` points the tools at another
+  checkout instead.
 - Rust: `rustup toolchain install nightly-2026-07-01 --component rust-src`
   (`thumbv4t-none-eabi` is built with `-Z build-std=core,alloc`).
 - CMake, Ninja and a C compiler for the headless emulator (`bun run emu:setup`).
@@ -139,8 +139,10 @@ ROM with late frames can be torn: the page flip happened mid-display.
   `docs`. Commit each finished task on its own.
 - lefthook formats staged files on every commit (prettier, rustfmt,
   clang-format) and re-stages them. Do not bypass it with `--no-verify`.
-- Changes to PocketJS itself belong in `../pocketjs` on
-  `feat/microts-game-subset`, committed there, not in this repository.
+- Changes to PocketJS itself belong upstream in pocket-nexus/pocketjs: commit
+  them on a branch in `pocketjs/`, open a pull request there, and once it
+  merges, move the submodule to the merged commit here
+  (`git -C pocketjs checkout <commit>`, then commit `pocketjs`).
 - Generated output (`build/`, `dist/`, `gen/`, `.cache/`) is ignored; never
   edit it by hand. `runtime/gba/Cargo.lock` pins the game crates' dependencies.
 - Ported games keep their original author and license in a comment at the

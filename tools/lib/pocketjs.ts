@@ -1,20 +1,20 @@
-/** Locates the PocketJS checkout and loads the MicroTS compiler from it. */
+/** Locates PocketJS (the pocketjs submodule) and loads the MicroTS compiler from it. */
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "../..");
 
-/** `POCKETJS_ROOT`, or a checkout next to this repository at ../pocketjs. */
+/** `POCKETJS_ROOT`, or the pocketjs submodule of this repository. */
 export function pocketjsRoot(): string {
-  const root = resolve(process.env.POCKETJS_ROOT ?? resolve(ROOT, "../pocketjs"));
+  const root = resolve(process.env.POCKETJS_ROOT ?? resolve(ROOT, "pocketjs"));
   if (!existsSync(resolve(root, "microts/compiler/aot-model-frontend.ts"))) {
-    throw new Error(`PocketJS checkout not found at ${root}; set POCKETJS_ROOT`);
+    throw new Error(`PocketJS not found at ${root}; run git submodule update --init, or set POCKETJS_ROOT`);
   }
   return root;
 }
 
-type Frontend = typeof import("../../../pocketjs/microts/compiler/aot-model-frontend.ts");
-type Codegen = typeof import("../../../pocketjs/microts/compiler/aot-model-codegen.ts");
+type Frontend = typeof import("../../pocketjs/microts/compiler/aot-model-frontend.ts");
+type Codegen = typeof import("../../pocketjs/microts/compiler/aot-model-codegen.ts");
 
 export async function microts(): Promise<{
   analyzeModel: Frontend["analyzeModel"];

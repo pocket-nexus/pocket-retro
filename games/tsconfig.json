@@ -9,7 +9,7 @@
     "allowImportingTsExtensions": true,
     "paths": {
       "retro": ["../sdk/retro.ts"],
-      "@pocketjs/framework/solid/std": ["../../pocketjs/framework/src/std-microts.ts"]
+      "@pocketjs/framework/solid/std": ["../pocketjs/framework/src/std-microts.ts"]
     }
   },
   "include": ["**/*.ts", "../sdk/**/*.ts"]

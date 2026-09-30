@@ -6,3 +6,4 @@ gen/
 target/
 .pocket-build/
 bun.lock
+pocketjs/

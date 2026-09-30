@@ -41,12 +41,13 @@ export function draw(): void {
 
 ## Build a ROM
 
-Prerequisites are listed in [AGENTS.md](AGENTS.md#prerequisites): Bun, a
-PocketJS checkout next to this repository, a Rust nightly with `rust-src`, and
-CMake/Ninja for the headless emulator used by the tools.
+Prerequisites are listed in [AGENTS.md](AGENTS.md#prerequisites): Bun, the
+PocketJS submodule, a Rust nightly with `rust-src`, and CMake/Ninja for the
+headless emulator used by the tools.
 
 ```sh
-bun install
+git submodule update --init               # PocketJS, in pocketjs/
+bun install && bun install --cwd pocketjs
 bun run emu:setup                         # once: builds the headless mGBA
 bun tools/build.ts games/jump             # → dist/jump.gba
 bun tools/run.ts dist/jump.gba --frames=300 --shot=jump.png

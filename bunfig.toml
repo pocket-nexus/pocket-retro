@@ -1,0 +1,3 @@
+# Tests live in tests/; the pocketjs submodule carries its own suite.
+[test]
+root = "tests"

@@ -158,7 +158,7 @@ source. The rules that matter most:
 
 MicroTS rejects what it cannot compile with a source location and a message;
 fix the port rather than working around the compiler. Its supported subset
-is documented in `../pocketjs/site/content/docs/typescript-support.md`.
+is documented in `pocketjs/site/content/docs/typescript-support.md`.
 Messages a port commonly meets:
 
 | Message or symptom                                        | Fix                                                                                                                              |
