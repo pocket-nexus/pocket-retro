@@ -238,8 +238,13 @@ copy_bytes:
 
 @ The destination is word aligned and the source is not: each word stored
 @ joins parts of two aligned source words, which costs half as much as
-@ copying bytes.
+@ copying bytes. Copies of 40 bytes or more take block_copy_shifted instead
+@ once the host has placed it in IWRAM.
 copy_shifted:
+    cmp r2, #40
+    ldrhs r12, retro_copy_shifted_entry
+    cmphs r12, #0
+    bxhi r12
     push {r4, r5}
     and r12, r1, #3
     bic r1, r1, #3
@@ -288,6 +293,9 @@ retro_move:
     bhs retro_copy
     add r0, r0, r2
     add r1, r1, r2
+    cmp r2, #40
+    ldrhs r12, retro_move_shifted_entry
+    bxhs r12
 move_back:
     cmp r2, #0
     bxeq lr
@@ -295,3 +303,151 @@ move_back:
     strb r3, [r0, #-1]!
     sub r2, r2, #1
     b move_back
+
+@ Where block_copy_shifted and block_move_shifted run from: none (0) and ROM
+@ at first, and the copy of them the host places in IWRAM when the screen
+@ leaves room (memory.rs).
+.global retro_copy_shifted_entry
+.global retro_move_shifted_entry
+retro_copy_shifted_entry:
+    .word 0
+retro_move_shifted_entry:
+    .word block_move_shifted
+
+@ Copies of 40 bytes or more between addresses of different word alignment,
+@ and backward moves of 40 bytes or more, reached from copy_shifted and
+@ retro_move: each destination word is shifted together from two aligned
+@ source words, 32 bytes per ldm/stm pair. The first load reads up to 3
+@ bytes outside the source, which is harmless outside I/O registers. They
+@ sit in ROM, leaving IWRAM to the screen, and the host copies them to IWRAM
+@ if room is left after placing the screen: they run from there two to
+@ three times as fast. The code from retro_shifted_start to
+@ retro_shifted_end therefore branches only relative to itself and uses no
+@ literal pool.
+.text
+.arm
+.align 2
+.global retro_shifted_start
+.global retro_shifted_end
+.global block_copy_shifted
+.global block_move_shifted
+retro_shifted_start:
+
+@ Forward. r0 = destination, r1 = source, r2 = byte count.
+block_copy_shifted:
+0:  tst r0, #3
+    ldrbne r3, [r1], #1
+    strbne r3, [r0], #1
+    subne r2, r2, #1
+    bne 0b
+    push {r4-r11, lr}
+    and r12, r1, #3
+    bic r1, r1, #3
+    mov r12, r12, lsl #3
+    rsb lr, r12, #32
+    ldr r3, [r1], #4
+    mov r3, r3, lsr r12
+1:  cmp r2, #36
+    blo 2f
+    ldmia r1!, {r4-r11}
+    orr r3, r3, r4, lsl lr
+    mov r4, r4, lsr r12
+    orr r4, r4, r5, lsl lr
+    mov r5, r5, lsr r12
+    orr r5, r5, r6, lsl lr
+    mov r6, r6, lsr r12
+    orr r6, r6, r7, lsl lr
+    mov r7, r7, lsr r12
+    orr r7, r7, r8, lsl lr
+    mov r8, r8, lsr r12
+    orr r8, r8, r9, lsl lr
+    mov r9, r9, lsr r12
+    orr r9, r9, r10, lsl lr
+    mov r10, r10, lsr r12
+    orr r10, r10, r11, lsl lr
+    stmia r0!, {r3-r10}
+    mov r3, r11, lsr r12
+    sub r2, r2, #32
+    b 1b
+2:  cmp r2, #8
+    blo 3f
+    ldr r4, [r1], #4
+    orr r3, r3, r4, lsl lr
+    str r3, [r0], #4
+    mov r3, r4, lsr r12
+    sub r2, r2, #4
+    b 2b
+    @ Back to the first source byte not copied, 4 - (source & 3) before r1.
+3:  sub r1, r1, lr, lsr #3
+    pop {r4-r11, lr}
+4:  cmp r2, #0
+    bxeq lr
+    ldrb r3, [r1], #1
+    strb r3, [r0], #1
+    sub r2, r2, #1
+    b 4b
+
+@ Backward, for a destination above an overlapping source: r0 and r1 point
+@ one past the ends, r2 = byte count. The mirror image of block_copy_shifted,
+@ which also moves aligned runs, without shifts.
+block_move_shifted:
+0:  tst r0, #3
+    ldrbne r3, [r1, #-1]!
+    strbne r3, [r0, #-1]!
+    subne r2, r2, #1
+    bne 0b
+    push {r4-r11, lr}
+    ands r12, r1, #3
+    bne 5f
+6:  cmp r2, #32
+    blo 7f
+    ldmdb r1!, {r3-r10}
+    stmdb r0!, {r3-r10}
+    sub r2, r2, #32
+    b 6b
+5:  bic r1, r1, #3
+    mov r12, r12, lsl #3
+    rsb lr, r12, #32
+    ldr r11, [r1]
+1:  cmp r2, #36
+    blo 2f
+    ldmdb r1!, {r3-r10}
+    mov r11, r11, lsl lr
+    orr r11, r11, r10, lsr r12
+    mov r10, r10, lsl lr
+    orr r10, r10, r9, lsr r12
+    mov r9, r9, lsl lr
+    orr r9, r9, r8, lsr r12
+    mov r8, r8, lsl lr
+    orr r8, r8, r7, lsr r12
+    mov r7, r7, lsl lr
+    orr r7, r7, r6, lsr r12
+    mov r6, r6, lsl lr
+    orr r6, r6, r5, lsr r12
+    mov r5, r5, lsl lr
+    orr r5, r5, r4, lsr r12
+    mov r4, r4, lsl lr
+    orr r4, r4, r3, lsr r12
+    stmdb r0!, {r4-r11}
+    mov r11, r3
+    sub r2, r2, #32
+    b 1b
+2:  cmp r2, #8
+    blo 3f
+    ldr r3, [r1, #-4]!
+    mov r11, r11, lsl lr
+    orr r11, r11, r3, lsr r12
+    str r11, [r0, #-4]!
+    mov r11, r3
+    sub r2, r2, #4
+    b 2b
+    @ Back to one past the last source byte not copied, (source & 3) after r1.
+3:  add r1, r1, r12, lsr #3
+7:  pop {r4-r11, lr}
+4:  cmp r2, #0
+    bxeq lr
+    ldrb r3, [r1, #-1]!
+    strb r3, [r0, #-1]!
+    sub r2, r2, #1
+    b 4b
+retro_shifted_end:

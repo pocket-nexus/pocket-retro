@@ -92,6 +92,8 @@ pub fn run<G: Game>(game: &mut G) -> ! {
         };
         log!("screen {}x{} in {}", screen.width, screen.height, place);
     }
+    // IWRAM left once the screen has its place runs unaligned copies faster.
+    memory::place_shifted_copies();
     game.voices().clear();
     let mut display = video::Display::new();
     audio::start();

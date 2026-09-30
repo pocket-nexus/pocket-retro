@@ -2,7 +2,7 @@
 
 use core::alloc::{GlobalAlloc, Layout};
 use core::cell::UnsafeCell;
-use core::ptr::{addr_of_mut, read_volatile, NonNull};
+use core::ptr::{addr_of, addr_of_mut, read_volatile, NonNull};
 use linked_list_allocator::Heap;
 
 use crate::hw;
@@ -80,6 +80,41 @@ pub fn move_to_iwram(buffer: &mut alloc::vec::Vec<u8>) {
     let moved = in_iwram(|| buffer.clone());
     if is_iwram(moved.as_ptr()) {
         *buffer = moved;
+    }
+}
+
+/// Runs the copies between buffers of different word alignment and the
+/// backward moves (block_copy_shifted and block_move_shifted in start.s)
+/// from a copy in IWRAM, where they run two to three times as fast as from
+/// ROM, if the IWRAM heap has room for it. The host calls it once the
+/// screen has its place.
+pub fn place_shifted_copies() {
+    extern "C" {
+        static retro_shifted_start: u8;
+        static retro_shifted_end: u8;
+        static block_copy_shifted: u8;
+        static block_move_shifted: u8;
+        static mut retro_copy_shifted_entry: usize;
+        static mut retro_move_shifted_entry: usize;
+    }
+    unsafe {
+        let start = addr_of!(retro_shifted_start) as usize;
+        let size = addr_of!(retro_shifted_end) as usize - start;
+        let mut code: alloc::vec::Vec<u32> = in_iwram(|| alloc::vec![0; size.div_ceil(4)]);
+        if !is_iwram(code.as_ptr() as *const u8) {
+            return;
+        }
+        core::ptr::copy_nonoverlapping(start as *const u8, code.as_mut_ptr() as *mut u8, size);
+        let base = code.as_ptr() as usize;
+        core::ptr::write_volatile(
+            addr_of_mut!(retro_copy_shifted_entry),
+            base + addr_of!(block_copy_shifted) as usize - start,
+        );
+        core::ptr::write_volatile(
+            addr_of_mut!(retro_move_shifted_entry),
+            base + addr_of!(block_move_shifted) as usize - start,
+        );
+        core::mem::forget(code);
     }
 }
 
