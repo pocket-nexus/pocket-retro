@@ -412,6 +412,11 @@ export function rect(s: I32, x: I32, y: I32, w: I32, h: I32, col: I32): void {
     else for (let j = y1; j <= y2; j++) row(s, x1, x2, j, value);
     return;
   }
+  // Columns one or two pixels wide cost less pixel by pixel than a fill call per row.
+  if (s === SCREEN && x2 - x1 < 2) {
+    for (let j = y1; j <= y2; j++) for (let i = x1; i <= x2; i++) screen[j * width + i] = u8(value);
+    return;
+  }
   if (s === SCREEN) fillRect(screen, y1 * width + x1, width, x2 - x1 + 1, y2 - y1 + 1, u8(value));
   else fillRect(banks[s], y1 * IMAGE_SIZE + x1, IMAGE_SIZE, x2 - x1 + 1, y2 - y1 + 1, u8(value));
 }
@@ -1004,13 +1009,43 @@ export function blt(s: I32, x: I32, y: I32, img: I32, u: I32, v: I32, w: I32, h:
     bltSelf(s, x, y, u, v, w, h, key);
     return;
   }
+  // Most blits copy a region inside an image bank to the screen, unflipped:
+  // only their destination needs clipping.
+  if (
+    s === SCREEN &&
+    img < SCREEN &&
+    w > 0 &&
+    h > 0 &&
+    u >= 0 &&
+    v >= 0 &&
+    u + w <= IMAGE_SIZE &&
+    v + h <= IMAGE_SIZE &&
+    ditherMask[s] === ALL_PIXELS
+  ) {
+    const dx = x - camX[s],
+      dy = y - camY[s];
+    const left = dx > clipX1[s] ? dx : clipX1[s],
+      top = dy > clipY1[s] ? dy : clipY1[s],
+      right = dx + w - 1 < clipX2[s] ? dx + w - 1 : clipX2[s],
+      bottom = dy + h - 1 < clipY2[s] ? dy + h - 1 : clipY2[s];
+    if (left > right || top > bottom) return;
+    copyW = right - left + 1;
+    copyH = bottom - top + 1;
+    const si = (v + top - dy) * IMAGE_SIZE + u + left - dx,
+      di = top * width + left;
+    if (copyW <= 2) narrowToScreen(img, si, di, 1, IMAGE_SIZE, blockKey(key));
+    else if (palIdentity[s]) blockToScreen(img, si, di, copyW, copyH, 1, IMAGE_SIZE, blockKey(key));
+    else blockToScreenMapped(img, si, di, copyW, copyH, 1, IMAGE_SIZE, blockKey(key));
+    return;
+  }
   writable(s);
   copyArea(s, x - camX[s], y - camY[s], u, v, surfaceWidth(img) - 1, surfaceHeight(img) - 1, w, h);
   if (copyW === 0 || copyH === 0) return;
   if (s === SCREEN && img < SCREEN && ditherMask[s] === ALL_PIXELS) {
     const si = (copySrcY + copyOffY) * IMAGE_SIZE + copySrcX + copyOffX,
       di = copyDstY * width + copyDstX;
-    if (palIdentity[s]) blockToScreen(img, si, di, copyW, copyH, copySignX, copySignY * IMAGE_SIZE, blockKey(key));
+    if (copyW <= 2) narrowToScreen(img, si, di, copySignX, copySignY * IMAGE_SIZE, blockKey(key));
+    else if (palIdentity[s]) blockToScreen(img, si, di, copyW, copyH, copySignX, copySignY * IMAGE_SIZE, blockKey(key));
     else blockToScreenMapped(img, si, di, copyW, copyH, copySignX, copySignY * IMAGE_SIZE, blockKey(key));
     return;
   }
@@ -1095,6 +1130,26 @@ function ditheredBlock(img: I32, u: I32, v: I32, x: I32, y: I32, w: I32, h: I32,
  */
 function ditherFromCartridge(from: I32, to: I32, x: I32, y: I32, w: I32, h: I32, key: I32): void {
   ditherBlock(FROM_CARTRIDGE, from, IMAGE_SIZE, to, x, y, w, h, key, false, 1, 4);
+}
+
+/**
+ * The copy window of a blit one or two pixels wide to the screen, such as
+ * the edge a scroll uncovers, pixel by pixel: a copy call per row costs
+ * more. Arguments as blockToScreen's, with the draw palette applied.
+ */
+function narrowToScreen(img: I32, si: I32, di: I32, step: I32, stride: I32, key: I32): void {
+  const end = di + copyH * width,
+    inRam = len(banks[img]) > 0,
+    identity = palIdentity[SCREEN];
+  // Column by column: one read and one write a row keep the loop short.
+  for (let i = 0; i < copyW; i++) {
+    let from = (inRam ? si : img * BANK_BYTES + si) + step * i;
+    for (let to = di + i; to < end; to += width) {
+      const c = inRam ? i32(banks[img][from]) : i32(IMAGES[from]);
+      if (c !== key) screen[to] = identity ? u8(c) : palMap[SCREEN * 256 + c];
+      from += stride;
+    }
+  }
 }
 
 /** A blit whose source is its destination reads a copy of the source region first. */
