@@ -1152,8 +1152,98 @@ function narrowToScreen(img: I32, si: I32, di: I32, step: I32, stride: I32, key:
   }
 }
 
+/** Pixels between the rows of a screen scroll that the move loses, kept aside. */
+let scrollGaps: U8[] = [];
+
+/**
+ * Moves the copy window within the screen. Rows almost as wide as the
+ * screen move together as one run, which spares a call per row: the run
+ * also overwrites the few pixels between the destination rows. Such a pixel
+ * that lies in the source region moves into the destination, `to - from`
+ * further on, and is read back from there; the others are kept aside first.
+ * Other windows move row by row, bottom up when they move down so each row
+ * is read before it is overwritten.
+ */
+function scrollScreen(): void {
+  const from = copySrcY * width + copySrcX,
+    to = copyDstY * width + copyDstX,
+    gap = width - copyW;
+  if (gap > 4) {
+    const down = copyDstY > copySrcY;
+    for (let j = 0; j < copyH; j++) {
+      const r = down ? copyH - 1 - j : j;
+      copyRange(screen, to + r * width, screen, from + r * width, copyW);
+    }
+    return;
+  }
+  const rows = copyH - 1,
+    shift = to - from;
+  if (gap === 0) {
+    copyRange(screen, to, screen, from, rows * width + copyW);
+    return;
+  }
+  // The gap after destination row r spans rows copyDstY + r and the next;
+  // its columns, the same for every row, may all lie in the source's.
+  let columnsInside = true;
+  for (let k = 0; k < gap; k++) {
+    const x = copyDstX + copyW + k < width ? copyDstX + copyW + k : copyDstX + copyW + k - width;
+    if (x < copySrcX || x >= copySrcX + copyW) columnsInside = false;
+  }
+  // Rows first to last have their gaps in the source; the others keep theirs aside.
+  let first = copySrcY - copyDstY > 0 ? copySrcY - copyDstY : 0,
+    last = copySrcY + copyH - 2 - copyDstY < rows - 1 ? copySrcY + copyH - 2 - copyDstY : rows - 1;
+  if (!columnsInside || last < first) {
+    first = rows;
+    last = rows - 1;
+  }
+  if (len(scrollGaps) < rows * gap) scrollGaps = fill(rows * gap, u8(0));
+  let kept = 0;
+  for (let r = 0; r < rows; r++) {
+    if (r === first) r = last + 1;
+    for (let k = 0; k < gap && r < rows; k++) {
+      scrollGaps[kept] = screen[to + r * width + copyW + k];
+      kept++;
+    }
+  }
+  copyRange(screen, to, screen, from, rows * width + copyW);
+  const end = to + last * width + copyW + gap;
+  for (let at = to + first * width + copyW; at < end; at += width - gap)
+    for (let k = 0; k < gap; k++) {
+      screen[at] = screen[at + shift];
+      at++;
+    }
+  kept = 0;
+  for (let r = 0; r < rows; r++) {
+    if (r === first) r = last + 1;
+    for (let k = 0; k < gap && r < rows; k++) {
+      screen[to + r * width + copyW + k] = scrollGaps[kept];
+      kept++;
+    }
+  }
+}
+
 /** A blit whose source is its destination reads a copy of the source region first. */
 function bltSelf(s: I32, x: I32, y: I32, u: I32, v: I32, w: I32, h: I32, key: I32): void {
+  // Scrolling the screen: without key, flip, dither or mapping, and from a
+  // region inside the screen, pixels move in place (copyRange within an
+  // array is a memmove).
+  if (
+    s === SCREEN &&
+    key < 0 &&
+    w > 0 &&
+    h > 0 &&
+    u >= 0 &&
+    v >= 0 &&
+    u + w <= width &&
+    v + h <= height &&
+    palIdentity[s] &&
+    ditherMask[s] === ALL_PIXELS
+  ) {
+    copyArea(s, x - camX[s], y - camY[s], u, v, width - 1, height - 1, w, h);
+    if (copyW === 0 || copyH === 0) return;
+    scrollScreen();
+    return;
+  }
   const aw = w < 0 ? -w : w,
     ah = h < 0 ? -h : h;
   const copy: I32[] = fill(aw * ah, 0);

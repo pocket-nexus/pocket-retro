@@ -129,8 +129,11 @@ ROM with late frames can be torn: the page flip happened mid-display.
   redraw it whole, and as one window is kept, two opaque layers a frame
   redraw each other.
 - Drawing to the screen without dither has fast paths, `pal()` mappings
-  included. Dithered fills (`rect`, `circ`, `elli`, `tri`) write every
-  fourth pixel of a row in one strided fill, about 15 cycles a pixel.
+  included. A `blt` of the screen onto itself without key, flip or `pal()`
+  moves its pixels in place, nearly full-width windows in one run: a screen
+  shake can scroll the screen rather than draw it again. Dithered fills
+  (`rect`, `circ`, `elli`, `tri`) write every fourth pixel of a row in one
+  strided fill, about 15 cycles a pixel.
   Dithered `blt` and `bltm` to the screen without flips or `pal()` draw with
   the fast copies and put back the pixels the pattern closes, or copy the
   open columns directly, 15 to 30 cycles a pixel, skipping 8 x 8 source
