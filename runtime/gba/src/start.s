@@ -41,6 +41,10 @@ reset:
     @ Enter Rust in system mode.
     ldr r0, =retro_main
     bx r0
+    @ mGBA loads a ROM under 256 KiB as a multiboot image when the words
+    @ after its header name EWRAM (as __data_start does above) but not the
+    @ first 128 KiB of ROM, where retro_main may not lie. Name the ROM here.
+    .word _start, _start
 
 boot_copy:
     cmp r1, r2
