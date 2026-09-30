@@ -10,6 +10,7 @@
 import {
   codePoints,
   copyRange,
+  copyRect,
   cos as stdCos,
   fill,
   fillRange,
@@ -133,7 +134,7 @@ export function round(value: F32): I32 {
   return i32(value + (value < f32(0) ? f32(-0.5) : f32(0.5)));
 }
 
-/** @iwram */
+/** The screen or bank color for `col` through surface s's draw palette. Only Thumb code calls it, which inlines it. */
 function mapped(s: I32, col: I32): I32 {
   return i32(palMap[s * 256 + (col & 255)]);
 }
@@ -144,6 +145,7 @@ function mapped(s: I32, col: I32): I32 {
 function writable(s: I32): void {
   if (s >= SCREEN) return;
   cellsStale[s] = true;
+  tilesVersion++;
   if (len(banks[s]) === 0) {
     banks[s] = fill(BANK_BYTES, u8(0));
     copyRange(banks[s], 0, IMAGES, s * BANK_BYTES, BANK_BYTES);
@@ -173,8 +175,7 @@ function measureCell(img: I32, cx: I32, cy: I32): I32 {
   return color;
 }
 
-/** Reads a surface pixel without camera or clip. */
-/** @iwram */
+/** Reads a surface pixel without camera or clip. Only Thumb code calls it, which inlines it. */
 export function read(s: I32, x: I32, y: I32): I32 {
   if (s === SCREEN) return i32(screen[y * width + x]);
   if (len(banks[s]) > 0) return i32(banks[s][y * IMAGE_SIZE + x]);
@@ -783,6 +784,81 @@ function bankToScreenMapped(img: I32, si: I32, di: I32, w: I32, h: I32, step: I3
   }
 }
 
+/** The screen under a dithered blit, which saveUnder() keeps for restoreUnder(). */
+let under: U8[] = [];
+
+/**
+ * Keeps the w x h screen block at (x, y) before a blit through dither: the
+ * blit draws every pixel with the fast copies, then restoreUnder() puts back
+ * those the dither pattern closes.
+ */
+function saveUnder(x: I32, y: I32, w: I32, h: I32): void {
+  if (len(under) < w * h) under = fill(w * h, u8(0));
+  copyRect(under, 0, w, screen, y * width + x, width, w, h);
+}
+
+/** Puts back the pixels of the block saveUnder() kept that the screen's dither pattern closes. */
+function restoreUnder(x: I32, y: I32, w: I32, h: I32): void {
+  for (let j = 0; j < h; j++) {
+    const bits = (ditherMask[SCREEN] >> (((y + j) & 3) << 2)) & 15,
+      from = j * w,
+      to = (y + j) * width + x;
+    if (bits === 0) copyRange(screen, to, under, from, w);
+    else if (bits !== 15)
+      for (let p = 0; p < 4; p++)
+        if ((bits & (1 << ((x + p) & 3))) === 0) columnsToScreen(FROM_UNDER, from, to, p, w, -1);
+  }
+}
+
+// Sources of columnsToScreen().
+const FROM_UNDER: I32 = 0;
+const FROM_CARTRIDGE: I32 = 1;
+const FROM_REPLAY: I32 = 2;
+
+/**
+ * Copies columns first, first + 4, ... below w of a row at `from` to the
+ * screen at `to`: from `under`, from replayPixels, or from the cartridge
+ * images leaving out color `key`.
+ */
+/** @iwram */
+function columnsToScreen(source: I32, from: I32, to: I32, first: I32, w: I32, key: I32): void {
+  if (source === FROM_CARTRIDGE) {
+    for (let i = first; i < w; i += 4) {
+      const c = IMAGES[from + i];
+      if (i32(c) !== key) screen[to + i] = c;
+    }
+  } else if (source === FROM_REPLAY) {
+    for (let i = first; i < w; i += 4) screen[to + i] = replayPixels[from + i];
+  } else {
+    for (let i = first; i < w; i += 4) screen[to + i] = under[from + i];
+  }
+}
+
+/**
+ * Draws the w x h replayPixels at (x, y) of the screen through its dither
+ * pattern. Rows with at most two of their four column phases open copy those
+ * columns; rows with three copy whole and put the closed columns back.
+ */
+function replayDithered(x: I32, y: I32, w: I32, h: I32): void {
+  if (len(under) < w) under = fill(w, u8(0));
+  for (let j = 0; j < h; j++) {
+    const bits = (ditherMask[SCREEN] >> (((y + j) & 3) << 2)) & 15,
+      open = (bits & 1) + ((bits >> 1) & 1) + ((bits >> 2) & 1) + ((bits >> 3) & 1),
+      from = j * w,
+      to = (y + j) * width + x;
+    if (open === 4) {
+      copyRange(screen, to, replayPixels, from, w);
+    } else if (open === 3) {
+      copyRange(under, 0, screen, to, w);
+      copyRange(screen, to, replayPixels, from, w);
+      for (let p = 0; p < 4; p++) if ((bits & (1 << ((x + p) & 3))) === 0) columnsToScreen(FROM_UNDER, 0, to, p, w, -1);
+    } else if (open > 0) {
+      for (let p = 0; p < 4; p++)
+        if ((bits & (1 << ((x + p) & 3))) !== 0) columnsToScreen(FROM_REPLAY, from, to, p, w, -1);
+    }
+  }
+}
+
 /** A color key the block copies can skip: colors are bytes, so larger keys match nothing. */
 function blockKey(key: I32): I32 {
   return key > 255 ? -1 : key;
@@ -818,6 +894,10 @@ export function blt(s: I32, x: I32, y: I32, img: I32, u: I32, v: I32, w: I32, h:
     else blockToScreenMapped(img, si, di, copyW, copyH, copySignX, copySignY * IMAGE_SIZE, blockKey(key));
     return;
   }
+  if (s === SCREEN && img < SCREEN && palIdentity[s] && copySignX > 0 && copySignY > 0) {
+    ditheredToScreen(img, blockKey(key));
+    return;
+  }
   for (let yi = 0; yi < copyH; yi++)
     rowGeneric(
       s,
@@ -830,6 +910,76 @@ export function blt(s: I32, x: I32, y: I32, img: I32, u: I32, v: I32, w: I32, h:
       copyW,
       key,
     );
+}
+
+/**
+ * The copy window of an unflipped blit to the screen through dither, drawn
+ * in blocks by ditheredBlock(). With a color key, the window goes one row
+ * of 8 x 8 source cells at a time, and runs of cells wholly of the key
+ * color, which draw nothing, are skipped.
+ */
+function ditheredToScreen(img: I32, key: I32): void {
+  if (ditherMask[SCREEN] === 0) return;
+  if (key < 0) {
+    ditheredBlock(img, copySrcX, copySrcY, copyDstX, copyDstY, copyW, copyH, key);
+    return;
+  }
+  refreshCells(img);
+  const right = copySrcX + copyW - 1,
+    bottom = copySrcY + copyH - 1;
+  for (let cy = copySrcY >> 3; cy <= bottom >> 3; cy++) {
+    const top = copySrcY > cy * 8 ? copySrcY : cy * 8,
+      rows = (bottom < cy * 8 + 7 ? bottom : cy * 8 + 7) - top + 1,
+      y = copyDstY + top - copySrcY;
+    // The first source column of the run being gathered, or -1; the column past the last cell ends it.
+    let start = -1;
+    for (let cx = copySrcX >> 3; cx <= (right >> 3) + 1; cx++) {
+      let color = key;
+      if (cx <= right >> 3) {
+        color = i32(cellColors[img * 1024 + cy * 32 + cx]);
+        if (color === UNKNOWN) color = measureCell(img, cx, cy);
+      }
+      if (color !== key) {
+        if (start < 0) start = copySrcX > cx * 8 ? copySrcX : cx * 8;
+        continue;
+      }
+      if (start < 0) continue;
+      const end = right + 1 < cx * 8 ? right + 1 : cx * 8;
+      ditheredBlock(img, start, top, copyDstX + start - copySrcX, y, end - start, rows, key);
+      start = -1;
+    }
+  }
+}
+
+/**
+ * Draws the w x h block at (u, v) of image img to (x, y) of the screen
+ * through its dither pattern, skipping `key`. Cartridge images write the
+ * open columns of each row directly; a bank copied to RAM is drawn whole and
+ * the closed pixels put back from `under`.
+ */
+function ditheredBlock(img: I32, u: I32, v: I32, x: I32, y: I32, w: I32, h: I32, key: I32): void {
+  const di = y * width + x;
+  if (len(banks[img]) === 0) {
+    ditherFromCartridge(img * BANK_BYTES + v * IMAGE_SIZE + u, di, x, y, w, h, key);
+    return;
+  }
+  saveUnder(x, y, w, h);
+  blockToScreen(img, v * IMAGE_SIZE + u, di, w, h, 1, IMAGE_SIZE, key);
+  restoreUnder(x, y, w, h);
+}
+
+/**
+ * Writes the pixels of a w x h block of cartridge images at `from` to screen
+ * index `to`, (x, y) being its screen position, where the screen's dither
+ * pattern leaves them open and they are not of color `key`.
+ */
+function ditherFromCartridge(from: I32, to: I32, x: I32, y: I32, w: I32, h: I32, key: I32): void {
+  for (let j = 0; j < h; j++) {
+    const bits = (ditherMask[SCREEN] >> (((y + j) & 3) << 2)) & 15;
+    for (let p = 0; p < 4; p++)
+      if ((bits & (1 << ((x + p) & 3))) !== 0)
+        columnsToScreen(FROM_CARTRIDGE, from + j * IMAGE_SIZE, to + j * width, p, w, key);
+  }
 }
 
 /** A blit whose source is its destination reads a copy of the source region first. */
@@ -1015,6 +1165,7 @@ export function tset(m: I32, x: I32, y: I32, value: I32): void {
   if (x < 0 || y < 0 || x >= TILEMAP_SIZE || y >= TILEMAP_SIZE) return;
   const chunk = writableChunk(m, x >> 4, y >> 4, false);
   if (chunk >= 0) chunks[chunk][((y & 15) << 4) | (x & 15)] = u16(value);
+  tileChanged(m, x, y);
 }
 
 /**
@@ -1038,6 +1189,7 @@ export function tilemapBlt(m: I32, x: I32, y: I32, src: I32, u: I32, v: I32, w: 
   const bottomSrc = h < 0 ? v + ah - 1 : TILEMAP_SIZE - 1 - v;
   const bottom = bottomDst < bottomSrc ? bottomDst : bottomSrc;
   if (first > last || top > bottom) return;
+  tilesVersion++;
   const self = src === m;
   // Whole chunks inside both maps share the source's.
   const aligned = w > 0 && h > 0 && ((x | y | u | v | w | h) & 15) === 0;
@@ -1125,8 +1277,191 @@ function copyChunks(m: I32, x: I32, y: I32, src: I32, u: I32, v: I32, w: I32, h:
     }
 }
 
+/**
+ * Bumped by writes that change many tiles or pixels at once (tilemap blt,
+ * image banks, a tilemap's image), which make replayed bltm pixels stale.
+ */
+let tilesVersion: I32 = 0;
+/**
+ * The pixels of the last opaque bltm to the screen, which the next draws of
+ * the same tilemap in a window of the same size copy: a still background
+ * costs one block copy a frame, and a scrolled one the copy of the part both
+ * windows share plus the tiles scrolled into view. replayKey holds that
+ * draw's tilemap, image, source window (x, y, w, h) and tilesVersion, then
+ * the tilemap pixels changed since by pset (x1, y1, x2, y2, empty when
+ * x1 >= x2), which are drawn again. replayRows counts the rows of the window
+ * kept so far.
+ */
+let replayPixels: U8[] = [];
+let replayKey: I32[] = [];
+let replayRows: I32 = 0;
+/** Rows kept by each draw that dither hides entirely, as at the start of a fade-in. */
+const REPLAY_BAND: I32 = 32;
+
+/** Notes a pset of tile (x, y) of tilemap m for the replayed bltm pixels. */
+function tileChanged(m: I32, x: I32, y: I32): void {
+  if (len(replayKey) === 0 || replayKey[0] !== m) return;
+  if (replayRows < replayKey[5]) {
+    replayRows = 0;
+    return;
+  }
+  if (replayKey[7] >= replayKey[9]) {
+    replayKey[7] = x * 8;
+    replayKey[8] = y * 8;
+    replayKey[9] = x * 8 + 8;
+    replayKey[10] = y * 8 + 8;
+    return;
+  }
+  if (x * 8 < replayKey[7]) replayKey[7] = x * 8;
+  if (y * 8 < replayKey[8]) replayKey[8] = y * 8;
+  if (x * 8 + 8 > replayKey[9]) replayKey[9] = x * 8 + 8;
+  if (y * 8 + 8 > replayKey[10]) replayKey[10] = y * 8 + 8;
+}
+
+/**
+ * tilesToScreen, opaque, for the part (x, y, w, h) of the copy window, in
+ * tilemap pixels; the part is clipped to the window.
+ */
+function tilesPart(m: I32, img: I32, x: I32, y: I32, w: I32, h: I32): void {
+  const srcX = copySrcX,
+    srcY = copySrcY,
+    dstX = copyDstX,
+    dstY = copyDstY,
+    windowW = copyW,
+    windowH = copyH;
+  const x1 = larger(x, srcX),
+    y1 = larger(y, srcY),
+    x2 = x + w < srcX + windowW ? x + w : srcX + windowW,
+    y2 = y + h < srcY + windowH ? y + h : srcY + windowH;
+  if (x1 >= x2 || y1 >= y2) return;
+  copySrcX = x1;
+  copySrcY = y1;
+  copyDstX = dstX + x1 - srcX;
+  copyDstY = dstY + y1 - srcY;
+  copyW = x2 - x1;
+  copyH = y2 - y1;
+  tilesToScreen(m, img, -1);
+  copySrcX = srcX;
+  copySrcY = srcY;
+  copyDstX = dstX;
+  copyDstY = dstY;
+  copyW = windowW;
+  copyH = windowH;
+}
+
+/** Keeps the copy window's pixels, now on the screen, in replayPixels. */
+function keepWindow(): void {
+  if (len(replayPixels) < copyW * copyH) replayPixels = fill(copyW * copyH, u8(0));
+  copyRect(replayPixels, 0, copyW, screen, copyDstY * width + copyDstX, width, copyW, copyH);
+  replayRows = copyH;
+  replayKey[2] = copySrcX;
+  replayKey[3] = copySrcY;
+  replayKey[7] = 0;
+  replayKey[9] = 0;
+}
+
+/**
+ * Draws the copy window of an opaque, unflipped bltm to the screen through
+ * replayPixels (see there). Returns false, having noted the window, when
+ * the caller has to draw it: the first draw of a window leaves keeping its
+ * pixels to the next, as a draw that starts a scene often comes with other
+ * work.
+ */
+function replayTiles(m: I32, img: I32): boolean {
+  if (len(replayKey) === 0) replayKey = fill(11, 0);
+  const hidden = ditherMask[SCREEN] === 0,
+    dithered = ditherMask[SCREEN] !== ALL_PIXELS,
+    dx = copySrcX - replayKey[2],
+    dy = copySrcY - replayKey[3];
+  const similar =
+    replayKey[0] === m &&
+    replayKey[1] === img &&
+    replayKey[4] === copyW &&
+    replayKey[5] === copyH &&
+    replayKey[6] === tilesVersion;
+  if (!similar || (replayRows < copyH && (dx !== 0 || dy !== 0))) {
+    replayKey[0] = m;
+    replayKey[1] = img;
+    replayKey[2] = copySrcX;
+    replayKey[3] = copySrcY;
+    replayKey[4] = copyW;
+    replayKey[5] = copyH;
+    replayKey[6] = tilesVersion;
+    replayRows = 0;
+    if (!hidden && !similar) return false;
+  }
+  if (hidden) {
+    keepBand(m, img);
+    return true;
+  }
+  refreshCells(img);
+  if (replayRows < copyH) {
+    // The window's second draw: draw it whole and keep it.
+    if (dithered) saveUnder(copyDstX, copyDstY, copyW, copyH);
+    tilesToScreen(m, img, -1);
+    keepWindow();
+    if (dithered) restoreUnder(copyDstX, copyDstY, copyW, copyH);
+    return true;
+  }
+  const changed = replayKey[7] < replayKey[9];
+  if (dx === 0 && dy === 0 && !changed) {
+    if (dithered) replayDithered(copyDstX, copyDstY, copyW, copyH);
+    else copyRect(screen, copyDstY * width + copyDstX, width, replayPixels, 0, copyW, copyW, copyH);
+    return true;
+  }
+  if (dithered) saveUnder(copyDstX, copyDstY, copyW, copyH);
+  // The part both windows share, x1..x2 by y1..y2 in tilemap pixels, is copied; the rest is drawn.
+  const x1 = larger(copySrcX, replayKey[2]),
+    y1 = larger(copySrcY, replayKey[3]),
+    x2 = copySrcX < replayKey[2] ? copySrcX + copyW : replayKey[2] + copyW,
+    y2 = copySrcY < replayKey[3] ? copySrcY + copyH : replayKey[3] + copyH;
+  if (x1 < x2 && y1 < y2) {
+    copyRect(
+      screen,
+      (copyDstY + y1 - copySrcY) * width + copyDstX + x1 - copySrcX,
+      width,
+      replayPixels,
+      (y1 - replayKey[3]) * copyW + x1 - replayKey[2],
+      copyW,
+      x2 - x1,
+      y2 - y1,
+    );
+    tilesPart(m, img, copySrcX, copySrcY, x1 - copySrcX, copyH);
+    tilesPart(m, img, x2, copySrcY, copySrcX + copyW - x2, copyH);
+    tilesPart(m, img, x1, copySrcY, x2 - x1, y1 - copySrcY);
+    tilesPart(m, img, x1, y2, x2 - x1, copySrcY + copyH - y2);
+    if (changed)
+      tilesPart(m, img, replayKey[7], replayKey[8], replayKey[9] - replayKey[7], replayKey[10] - replayKey[8]);
+  } else {
+    tilesToScreen(m, img, -1);
+  }
+  keepWindow();
+  if (dithered) restoreUnder(copyDstX, copyDstY, copyW, copyH);
+  return true;
+}
+
+/**
+ * For a bltm that dither hides entirely: draws the next REPLAY_BAND rows of
+ * its copy window to the screen, keeps them in replayPixels and puts the
+ * screen back, so the draws that follow can replay them.
+ */
+function keepBand(m: I32, img: I32): void {
+  if (replayRows >= copyH) return;
+  if (len(replayPixels) < copyW * copyH) replayPixels = fill(copyW * copyH, u8(0));
+  const rows = copyH - replayRows < REPLAY_BAND ? copyH - replayRows : REPLAY_BAND,
+    top = copyDstY + replayRows,
+    di = top * width + copyDstX;
+  saveUnder(copyDstX, top, copyW, rows);
+  refreshCells(img);
+  tilesPart(m, img, copySrcX, copySrcY + replayRows, copyW, rows);
+  copyRect(replayPixels, replayRows * copyW, copyW, screen, di, width, copyW, rows);
+  copyRect(screen, di, width, under, 0, copyW, copyW, rows);
+  replayRows += rows;
+}
+
 export function setTilemapImage(m: I32, img: I32): void {
   tilemapSources[m] = img;
+  tilesVersion++;
 }
 
 export function tilemapImage(m: I32): I32 {
@@ -1142,10 +1477,15 @@ export function bltm(s: I32, x: I32, y: I32, m: I32, u: I32, v: I32, w: I32, h: 
   copyArea(s, x - camX[s], y - camY[s], u, v, TILEMAP_SIZE * 8 - 1, TILEMAP_SIZE * 8 - 1, w, h);
   if (copyW === 0 || copyH === 0) return;
   const img = tilemapSources[m];
-  if (s === SCREEN && img < SCREEN && copySignX > 0 && copySignY > 0 && ditherMask[s] === ALL_PIXELS) {
+  if (s === SCREEN && img < SCREEN && copySignX > 0 && copySignY > 0) {
+    if (blockKey(key) < 0 && palIdentity[s] && replayTiles(m, img)) return;
+    if (ditherMask[s] === 0) return;
+    const dithered = ditherMask[s] !== ALL_PIXELS;
+    if (dithered) saveUnder(copyDstX, copyDstY, copyW, copyH);
     refreshCells(img);
     if (palIdentity[s]) tilesToScreen(m, img, blockKey(key));
     else tilesToScreenMapped(m, img, blockKey(key));
+    if (dithered) restoreUnder(copyDstX, copyDstY, copyW, copyH);
     return;
   }
   for (let yi = 0; yi < copyH; yi++) {
@@ -1165,10 +1505,11 @@ export function bltm(s: I32, x: I32, y: I32, m: I32, u: I32, v: I32, w: I32, h: 
 
 /**
  * The copy window of an unflipped bltm to the screen, one block per tile.
- * Runs from IWRAM: single-color cells are filled here and mixed ones copied
- * by blockToScreen, a call per cell that costs less than the IWRAM a copy
- * written out here for each source and color key would take. measureCell
- * and tget, needed for unmeasured cells and changed tiles only, stay in ROM.
+ * Runs from IWRAM: single-color cells are filled here, a run of neighbors of
+ * one color at a time, and mixed ones copied by blockToScreen, a call per
+ * cell that costs less than the IWRAM a copy written out here for each
+ * source and color key would take. measureCell and tget, needed for
+ * unmeasured cells and changed tiles only, stay in ROM.
  */
 /** @iwram */
 function tilesToScreen(m: I32, img: I32, key: I32): void {
@@ -1178,23 +1519,41 @@ function tilesToScreen(m: I32, img: I32, key: I32): void {
     const top = copySrcY > ty * 8 ? copySrcY - ty * 8 : 0,
       rows = (bottom - ty * 8 < 7 ? bottom - ty * 8 : 7) - top + 1;
     const rowStart = (copyDstY + ty * 8 + top - copySrcY) * width + copyDstX - copySrcX;
-    for (let tx = copySrcX >> 3; tx <= right >> 3; tx++) {
-      // copyArea keeps (tx, ty) inside the map, so only tiles written at run time need tget.
-      const at = m * TILEMAP_BYTES + (ty * TILEMAP_SIZE + tx) * 2;
-      const value = len(chunkOf) > 0 ? tget(m, tx, ty) : i32(TILEMAPS[at]) | (i32(TILEMAPS[at + 1]) << 8);
-      // Tiles name 8 x 8 cells of a 256 x 256 image; others draw nothing.
-      const cx = value & 255,
-        cy = value >> 8;
-      if (cx >= 32 || cy >= 32) continue;
-      let color = i32(cellColors[img * 1024 + cy * 32 + cx]);
-      if (color === UNKNOWN) color = measureCell(img, cx, cy);
-      if (color === key) continue;
-      const left = copySrcX > tx * 8 ? copySrcX - tx * 8 : 0,
+    // The fill pending for a run of single-color cells: its color (-1 for none), start and width.
+    let runColor = -1,
+      runStart = 0,
+      runCols = 0;
+    for (let tx = copySrcX >> 3; tx <= (right >> 3) + 1; tx++) {
+      // The tile's cell color, screen index, width and source index; the tile past the last one ends the run.
+      let color = -1,
+        di = 0,
+        cols = 0,
+        si = 0;
+      if (tx <= right >> 3) {
+        // copyArea keeps (tx, ty) inside the map, so only tiles written at run time need tget.
+        const at = m * TILEMAP_BYTES + (ty * TILEMAP_SIZE + tx) * 2;
+        const value = len(chunkOf) > 0 ? tget(m, tx, ty) : i32(TILEMAPS[at]) | (i32(TILEMAPS[at + 1]) << 8);
+        // Tiles name 8 x 8 cells of a 256 x 256 image; others draw nothing.
+        const cx = value & 255,
+          cy = value >> 8;
+        if (cx >= 32 || cy >= 32) continue;
+        color = i32(cellColors[img * 1024 + cy * 32 + cx]);
+        if (color === UNKNOWN) color = measureCell(img, cx, cy);
+        if (color === key) continue;
+        const left = copySrcX > tx * 8 ? copySrcX - tx * 8 : 0;
         cols = (right - tx * 8 < 7 ? right - tx * 8 : 7) - left + 1;
-      const di = rowStart + tx * 8 + left,
+        di = rowStart + tx * 8 + left;
         si = (cy * 8 + top) * IMAGE_SIZE + cx * 8 + left;
-      if (color !== MIXED) fillRect(screen, di, width, cols, rows, u8(color));
-      else blockToScreen(img, si, di, cols, rows, 1, IMAGE_SIZE, key);
+        if (color === runColor && di === runStart + runCols) {
+          runCols += cols;
+          continue;
+        }
+      }
+      if (runColor >= 0) fillRect(screen, runStart, width, runCols, rows, u8(runColor));
+      runColor = color !== MIXED ? color : -1;
+      runStart = di;
+      runCols = cols;
+      if (color === MIXED) blockToScreen(img, si, di, cols, rows, 1, IMAGE_SIZE, key);
     }
   }
 }
@@ -1358,21 +1717,31 @@ function glyphClipped(s: I32, x: I32, y: I32, bits: I32, value: I32): void {
   }
 }
 
-/** Writes the set pixels of a glyph, bit 23 being its top left, at screen index `at`. */
+/**
+ * Writes the set pixels of a glyph, bit 23 being its top left, at screen
+ * index `at`. The loop ends after the last row with pixels, which keeps the
+ * compiler from unrolling it into IWRAM six times over.
+ */
 /** @iwram */
 function glyphToScreen(at: I32, bits: I32, color: U8): void {
-  for (let fy = 0; fy < 6; fy++) {
-    const line = (bits >> (20 - fy * 4)) & 15,
-      row = at + fy * width;
+  let rows = bits & 0xffffff,
+    row = at;
+  while (rows !== 0) {
+    const line = rows >> 20;
     if ((line & 8) !== 0) screen[row] = color;
     if ((line & 4) !== 0) screen[row + 1] = color;
     if ((line & 2) !== 0) screen[row + 2] = color;
     if ((line & 1) !== 0) screen[row + 3] = color;
+    rows = (rows << 4) & 0xffffff;
+    row += width;
   }
 }
 
-/** A mask of the glyph rows at y that lie in top..bottom, bit 23 being the top left pixel. */
-/** @iwram */
+/**
+ * A mask of the glyph rows at y that lie in top..bottom, bit 23 being the
+ * top left pixel. It stays out of IWRAM: only glyphs cut by the clip
+ * rectangle's top or bottom need it.
+ */
 function rowsShown(y: I32, top: I32, bottom: I32): I32 {
   const first = y < top ? top - y : 0,
     last = y + 5 > bottom ? bottom - y : 5;

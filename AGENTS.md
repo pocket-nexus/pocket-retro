@@ -119,13 +119,22 @@ ROM with late frames can be torn: the page flip happened mid-display.
 - Tilemap drawing classifies each 8 x 8 cell of an image bank by color:
   cells of the transparent color are skipped and single-color cells filled.
   Any write to a bank resets its cells, so games that draw into a bank every
-  frame lose this.
+  frame lose this. A full 128 x 128 window still costs 250,000 cycles or
+  more, so an opaque `bltm` to the screen (no color key, no `pal()`) keeps
+  its pixels once drawn twice: the next draws of a window of the same size
+  copy them and draw only the tiles scrolled into view and those changed by
+  `tilemap.pset`. Writes to many tiles at once (`tilemap.blt`, image banks)
+  redraw it whole, and as one window is kept, two opaque layers a frame
+  redraw each other.
 - Drawing to the screen without dither has fast paths, `pal()` mappings
   included. Dithered fills (`rect`, `circ`, `elli`, `tri`) write every
-  fourth pixel of a row in one strided fill, about 15 cycles a pixel. Other
-  drawing through dither, drawing into image banks, flipped `bltm` and
-  rotated or scaled `blt` go pixel by pixel through clip, dither and palette
-  checks (100 or more cycles a pixel).
+  fourth pixel of a row in one strided fill, about 15 cycles a pixel.
+  Dithered `blt` and `bltm` to the screen without flips or `pal()` draw with
+  the fast copies and put back the pixels the pattern closes, or copy the
+  open columns directly, 15 to 30 cycles a pixel, skipping 8 x 8 source
+  cells of the color key. Other drawing through dither, drawing into image
+  banks, flipped `bltm` and rotated or scaled `blt` go pixel by pixel
+  through clip, dither and palette checks (100 or more cycles a pixel).
 - Strings cost allocations: each string passed to a function and each `+`
   copies (1,000 or more cycles each), and `codePoints()` allocates its
   result. A template string builds its result in one step. Keep per-frame
