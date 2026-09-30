@@ -1,6 +1,7 @@
 {
   "name": "pocket-retro",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "prepare": "lefthook install",
