@@ -223,12 +223,25 @@ function row(s: I32, x1: I32, x2: I32, y: I32, value: I32): void {
   const right = x2 > clipX2[s] ? clipX2[s] : x2;
   if (left > right) return;
   if (ditherMask[s] !== ALL_PIXELS) {
-    for (let x = left; x <= right; x++) put(s, x, y, value);
+    ditherRow(s, left, right, y, value);
   } else if (s === SCREEN) {
     fillRange(screen, y * width + left, y * width + right + 1, u8(value));
   } else {
     fillRange(banks[s], y * IMAGE_SIZE + left, y * IMAGE_SIZE + right + 1, u8(value));
   }
+}
+
+/**
+ * row() through dither, which lets the same pixels through every 4 columns:
+ * each of the first 4 pixels it lets through starts a fill of every fourth pixel.
+ */
+function ditherRow(s: I32, left: I32, right: I32, y: I32, value: I32): void {
+  const bits = ditherMask[s] >> ((y & 3) << 2);
+  for (let x = left; x < left + 4 && x <= right; x++)
+    if ((bits & (1 << (x & 3))) !== 0) {
+      if (s === SCREEN) fillRect(screen, y * width + x, 4, 1, ((right - x) >> 2) + 1, u8(value));
+      else fillRect(banks[s], y * IMAGE_SIZE + x, 4, 1, ((right - x) >> 2) + 1, u8(value));
+    }
 }
 
 /** Vertical run from y1 to y2 inclusive on column x, clipped; value is mapped. */

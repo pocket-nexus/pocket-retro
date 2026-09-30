@@ -119,8 +119,11 @@ ROM with late frames can be torn: the page flip happened mid-display.
   Any write to a bank resets its cells, so games that draw into a bank every
   frame lose this.
 - Drawing to the screen without dither has fast paths, `pal()` mappings
-  included. Dither, drawing into image banks, flipped `bltm` and rotated or
-  scaled `blt` go pixel by pixel through clip, dither and palette checks.
+  included. Dithered fills (`rect`, `circ`, `elli`, `tri`) write every
+  fourth pixel of a row in one strided fill, about 15 cycles a pixel. Other
+  drawing through dither, drawing into image banks, flipped `bltm` and
+  rotated or scaled `blt` go pixel by pixel through clip, dither and palette
+  checks (100 or more cycles a pixel).
 - Strings cost allocations: each string passed to a function and each `+`
   copies (1,000 or more cycles each), and `codePoints()` allocates its
   result. A template string builds its result in one step. Keep per-frame
