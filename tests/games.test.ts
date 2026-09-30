@@ -24,6 +24,8 @@ const SCRIPTS: Record<string, string> = {
   platformer: "60:- 120:RIGHT 10:RIGHT+A 90:RIGHT 30:LEFT",
   // The pal() test runs from frame 150 (VBlank 300); A holds the clip test.
   draw_api: "60:- 30:RIGHT 30:DOWN 60:A 180:- 120:A 60:LEFT+UP",
+  // Rescues two astronauts, flies into a meteor, then starts again.
+  space_rescue: "60:- 4:START 2:- 38:A 300:- 74:A 120:- 4:START 60:- 30:A 30:-",
 };
 
 const games = readdirSync(resolve(ROOT, "games"), { withFileTypes: true })
