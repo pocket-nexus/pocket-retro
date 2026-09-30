@@ -10,7 +10,6 @@
 import {
   codePoints,
   copyRange,
-  copyRect,
   cos as stdCos,
   fill,
   fillRange,
@@ -954,8 +953,10 @@ function slot(key: I32): I32 {
   return index;
 }
 
-/** The tile at (x, y) of tilemap m, in tiles; outside the map it is tile(0, 0). */
-/** @iwram */
+/**
+ * The tile at (x, y) of tilemap m, in tiles; outside the map it is tile(0, 0).
+ * Out of IWRAM: tilesToScreen reads unchanged tiles itself.
+ */
 export function tget(m: I32, x: I32, y: I32): I32 {
   if (x < 0 || y < 0 || x >= TILEMAP_SIZE || y >= TILEMAP_SIZE) return 0;
   if (overlayCount > 0) {
@@ -1022,11 +1023,13 @@ export function bltm(s: I32, x: I32, y: I32, m: I32, u: I32, v: I32, w: I32, h: 
 
 /**
  * The copy window of an unflipped bltm to the screen, one block per tile.
- * Runs from IWRAM, so helpers it calls are written out or tagged too.
+ * Runs from IWRAM: single-color cells are filled here and mixed ones copied
+ * by blockToScreen, a call per cell that costs less than the IWRAM a copy
+ * written out here for each source and color key would take. measureCell
+ * and tget, needed for unmeasured cells and changed tiles only, stay in ROM.
  */
 /** @iwram */
 function tilesToScreen(m: I32, img: I32, key: I32): void {
-  const inRam = len(banks[img]) > 0;
   const right = copySrcX + copyW - 1,
     bottom = copySrcY + copyH - 1;
   for (let ty = copySrcY >> 3; ty <= bottom >> 3; ty++) {
@@ -1048,12 +1051,8 @@ function tilesToScreen(m: I32, img: I32, key: I32): void {
         cols = (right - tx * 8 < 7 ? right - tx * 8 : 7) - left + 1;
       const di = rowStart + tx * 8 + left,
         si = (cy * 8 + top) * IMAGE_SIZE + cx * 8 + left;
-      // Copies are written out here rather than in blockToScreen to save a call per tile.
       if (color !== MIXED) fillRect(screen, di, width, cols, rows, u8(color));
-      else if (inRam && key < 0) copyRect(screen, di, width, banks[img], si, IMAGE_SIZE, cols, rows);
-      else if (inRam) copyRect(screen, di, width, banks[img], si, IMAGE_SIZE, cols, rows, u8(key));
-      else if (key < 0) copyRect(screen, di, width, IMAGES, img * BANK_BYTES + si, IMAGE_SIZE, cols, rows);
-      else copyRect(screen, di, width, IMAGES, img * BANK_BYTES + si, IMAGE_SIZE, cols, rows, u8(key));
+      else blockToScreen(img, si, di, cols, rows, 1, IMAGE_SIZE, key);
     }
   }
 }
