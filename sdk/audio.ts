@@ -13,6 +13,7 @@
  */
 import {
   codePoints,
+  equals,
   f64,
   fill,
   i32,
@@ -81,6 +82,12 @@ const FULL_LEVEL: I32 = 127 * 256;
 let classic: I32[][] = [];
 let mml: I32[][] = [];
 let musicSeqs: I32[][] = [];
+/**
+ * Per sound n, the clocks its classic commands last at 2n (-1 when too long
+ * to count) and the pitch of their last note at 2n + 1 (UNSET without
+ * notes); UNSET at 2n until counted.
+ */
+let classicSpans: I32[] = [];
 /** Phase step per output sample of a 32-sample waveform at each MIDI note, 16.16 fixed point. */
 let noteSteps: I32[] = fill(161, 0);
 let tickRemainder: I32 = 0;
@@ -108,6 +115,8 @@ interface Channel {
   saved: boolean;
   savedSounds: I32[];
   savedLoop: boolean;
+  /** Clocks of one pass of savedSounds, or UNSET until counted again. */
+  savedClocks: I32;
   clocksPerTick: I32;
   gate: I32;
   tone: I32;
@@ -153,6 +162,7 @@ function newChannel(): Channel {
     saved: false,
     savedSounds: [],
     savedLoop: false,
+    savedClocks: UNSET,
     clocksPerTick: 18643,
     gate: 80,
     tone: 0,
@@ -200,6 +210,7 @@ export function reset(): void {
     noteSteps[m] = i32(round(f64(440) * pow(f64(2), f64(m - 69) / f64(12)) * scale));
   classic = [];
   mml = [];
+  classicSpans = fill(2 * NUM_SOUNDS, UNSET);
   for (let n = 0; n < NUM_SOUNDS; n++) {
     push(classic, []);
     push(mml, []);
@@ -248,6 +259,7 @@ export function setSound(n: I32, notes: string, tones: string, volumes: string, 
     parseLetters(effects, "nsvfhq"),
     speed > 0 ? speed : 1,
   );
+  forgetClocks(n);
 }
 
 /**
@@ -259,6 +271,13 @@ export function setMml(n: I32, code: string): void {
   if (n < 0 || n >= NUM_SOUNDS) return;
   const commands = parseMml(code);
   if (len(mmlError) === 0) mml[n] = commands;
+  forgetClocks(n);
+}
+
+/** Sound n changed: it and the saved playlists that play it may last differently. */
+function forgetClocks(n: I32): void {
+  classicSpans[2 * n] = UNSET;
+  for (let c = 0; c < len(channels); c++) channels[c].savedClocks = UNSET;
 }
 
 /** Pyxel's Music.set: one list of sound numbers per channel. */
@@ -342,6 +361,8 @@ export function play(ch: I32, sounds: I32[], loop: boolean, resume: boolean): vo
   if (resume) {
     if (!channels[ch].saved && channels[ch].playing) {
       channels[ch].saved = true;
+      // Sound effects keep interrupting the same music: its length stays counted.
+      if (!equals(channels[ch].savedSounds, channels[ch].sounds)) channels[ch].savedClocks = UNSET;
       channels[ch].savedSounds = channels[ch].sounds;
       channels[ch].savedLoop = channels[ch].loop;
     }
@@ -397,16 +418,17 @@ export function playingNote(ch: I32): I32 {
 
 /**
  * Runs channel c's commands up to its next note or rest and starts it at
- * `remaining` clocks into the current tick. False when the playlist ended.
+ * `remaining` clocks into the current tick, whose middle is at `half` clocks.
+ * False when the playlist ended.
  */
-function nextEvent(c: I32): boolean {
+function nextEvent(c: I32, half: I32): boolean {
   // Enough steps to pass every sound of a playlist that holds no note or rest.
   let budget = 4096;
   while (budget > 0) {
     budget--;
     const n = channels[c].sounds[channels[c].sound];
     const at = channels[c].command;
-    if (at >= commandCount(n)) {
+    if (at >= commandCount(n) || (at === 0 && passClassic(c, n, half))) {
       if (!nextSound(c)) return false;
       continue;
     }
@@ -414,7 +436,7 @@ function nextEvent(c: I32): boolean {
     const value = command(n, at + 1);
     channels[c].command = at + commandSize(op, command(n, at + 3));
     if (op === CMD_NOTE) {
-      startNote(c, value, command(n, at + 2));
+      startNote(c, value, command(n, at + 2), half);
       return true;
     }
     if (op === CMD_REST) {
@@ -472,6 +494,56 @@ function nextEvent(c: I32): boolean {
   }
   channels[c].playing = false;
   return false;
+}
+
+/**
+ * Passes classic sound n whole when it ends before the middle of the tick,
+ * as a resumed playlist catches up: none of its notes sounds, and in a
+ * playlist of classic sounds the next sets everything it plays with before
+ * its first note. False, having changed nothing, otherwise.
+ */
+function passClassic(c: I32, n: I32, half: I32): boolean {
+  if (n < 0 || n >= NUM_SOUNDS || len(mml[n]) > 0) return false;
+  const span = classicSpan(n);
+  if (span < 0 || channels[c].remaining + span > half) return false;
+  for (let s = 0; s < len(channels[c].sounds); s++) if (len(mml[channels[c].sounds[s]]) > 0) return false;
+  channels[c].remaining += span;
+  if (classicSpans[2 * n + 1] !== UNSET) {
+    channels[c].lastPitch = classicSpans[2 * n + 1];
+    channels[c].noteOn = false;
+  }
+  return true;
+}
+
+/** Clocks classic sound n lasts, or -1 past MAX_EVENT_CLOCKS; counted once until it changes. */
+function classicSpan(n: I32): I32 {
+  if (classicSpans[2 * n] !== UNSET) return classicSpans[2 * n];
+  let perTick = 0,
+    transpose = 0,
+    detune = 0,
+    clock = 0,
+    pitch = UNSET,
+    at = 0;
+  while (at < len(classic[n])) {
+    const op = classic[n][at],
+      value = classic[n][at + 1];
+    if (op === CMD_TEMPO) perTick = value;
+    else if (op === CMD_TRANSPOSE) transpose = value;
+    else if (op === CMD_DETUNE) detune = value;
+    else if (op === CMD_NOTE || op === CMD_REST) {
+      const clocks = eventClocks(perTick, op === CMD_NOTE ? classic[n][at + 2] : value);
+      if (clocks > MAX_EVENT_CLOCKS - clock) {
+        clock = -1;
+        break;
+      }
+      clock += clocks;
+      if (op === CMD_NOTE) pitch = (value + transpose) * 64 + centsTo64ths(detune);
+    }
+    at += commandSize(op, classic[n][at + 3]);
+  }
+  classicSpans[2 * n] = clock;
+  classicSpans[2 * n + 1] = pitch;
+  return clock;
 }
 
 function defineEnvelope(c: I32, n: I32, at: I32): void {
@@ -562,7 +634,8 @@ function nextSound(c: I32): boolean {
 function resumeSaved(c: I32): void {
   channels[c].saved = false;
   let position = channels[c].playClock + channels[c].remaining;
-  const total = playlistClocks(channels[c].savedSounds);
+  if (channels[c].savedClocks === UNSET) channels[c].savedClocks = playlistClocks(channels[c].savedSounds);
+  const total = channels[c].savedClocks;
   if (channels[c].savedLoop && total > 0) position = position % total;
   startPlaylist(c, channels[c].savedSounds, channels[c].savedLoop);
   // Events before `position` run silently as the next ticks catch up.
@@ -582,6 +655,14 @@ function playlistClocks(sounds: I32[]): I32 {
     repeatClock: I32[] = fill(REPEAT_DEPTH, 0);
   for (let s = 0; s < len(sounds); s++) {
     const n = sounds[s];
+    // A classic sound has no repeats: its counted length serves.
+    const span = n >= 0 && n < NUM_SOUNDS && len(mml[n]) === 0 ? classicSpan(n) : -1;
+    if (span >= 0) {
+      if (span > 2000000000 - total) return -1;
+      total += span;
+      if (len(classic[n]) > 1 && classic[n][0] === CMD_TEMPO) perTick = classic[n][1];
+      continue;
+    }
     let at = 0,
       depth = 0,
       clock = 0,
@@ -595,7 +676,10 @@ function playlistClocks(sounds: I32[]): I32 {
       if (op === CMD_TEMPO) perTick = value;
       else if (op === CMD_NOTE || op === CMD_REST) {
         const ticks = op === CMD_NOTE ? command(n, at + 2) : value;
-        if (ticks > idiv(2000000000 - clock, perTick)) return -1;
+        if (
+          fitsProduct(perTick, ticks) ? perTick * ticks > 2000000000 - clock : ticks > idiv(2000000000 - clock, perTick)
+        )
+          return -1;
         clock += perTick * ticks;
       } else if (op === CMD_REPEAT_START) {
         if (depth < REPEAT_DEPTH) {
@@ -625,16 +709,38 @@ function playlistClocks(sounds: I32[]): I32 {
   return total;
 }
 
+/**
+ * Whether perTick * (ticks + 1) fits in 31 bits for a positive tempo, so the
+ * sequencer can compare products instead of dividing: the GBA divides in
+ * software, at a few hundred cycles a division.
+ */
+function fitsProduct(perTick: I32, ticks: I32): boolean {
+  return perTick > 0 && perTick < 65536 && ticks >= 0 && ticks < 16383;
+}
+
 /** Clocks of `ticks` ticks, capped far beyond any tune's longest note. */
 function eventClocks(perTick: I32, ticks: I32): I32 {
+  if (fitsProduct(perTick, ticks))
+    return perTick * (ticks + 1) <= MAX_EVENT_CLOCKS ? perTick * ticks : MAX_EVENT_CLOCKS;
   return ticks < idiv(MAX_EVENT_CLOCKS, perTick) ? perTick * ticks : MAX_EVENT_CLOCKS;
 }
 
-/** Starts a note at `remaining` clocks into the current tick. */
-function startNote(c: I32, midi: I32, ticks: I32): void {
+/** Starts a note at `remaining` clocks into the current tick, whose middle is at `half` clocks. */
+function startNote(c: I32, midi: I32, ticks: I32, half: I32): void {
   const perTick = channels[c].clocksPerTick;
   const pitch = (midi + channels[c].transpose) * 64 + centsTo64ths(channels[c].detune);
   const clocks = eventClocks(perTick, ticks);
+  if (channels[c].remaining + clocks <= half) {
+    // The note ends before the middle of this tick, so the next event takes
+    // its place before it sounds (a gate is at most the note's length). A
+    // resumed playlist catches up through many such notes at once.
+    channels[c].noteOn = false;
+    channels[c].lastPitch = pitch;
+    channels[c].remaining += clocks;
+    channels[c].soundClock += clocks;
+    channels[c].notes++;
+    return;
+  }
   if (channels[c].glidePending) {
     const last = channels[c].lastPitch !== UNSET ? channels[c].lastPitch : pitch;
     channels[c].glideOffset =
@@ -676,7 +782,7 @@ export function advance(ticks: I32): void {
 function tickChannel(c: I32, clocks: I32): void {
   const half = clocks >> 1;
   // Events that start in the first half of the tick sound from its start.
-  while (channels[c].playing && channels[c].remaining <= half) if (!nextEvent(c)) break;
+  while (channels[c].playing && channels[c].remaining <= half) if (!nextEvent(c, half)) break;
   emitVoice(c, channels[c].noteElapsed + half);
   channels[c].noteElapsed += clocks;
   channels[c].noteFine += channels[c].fineStep;
