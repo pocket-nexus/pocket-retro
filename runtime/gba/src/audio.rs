@@ -215,7 +215,11 @@ fn mix(
         let mut position = phase[c];
         let mut i = 0;
         if played.tone == 3 {
-            // One shift of the 15-bit LFSR (tap bit 1) per 1.0 of phase.
+            // One shift of the 15-bit LFSR (tap bit 1) per 1.0 of phase. Noise
+            // keeps only the fraction of its phase: a channel that played a
+            // tone before holds any u32 there, which would otherwise cost up
+            // to 65,535 shifts in one sample.
+            position &= 0xffff;
             let mut lfsr = noise[c];
             while i < SAMPLES_PER_TICK {
                 let amplitude = if i < RAMP_SAMPLES {
