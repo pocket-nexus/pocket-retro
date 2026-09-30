@@ -170,6 +170,7 @@ Messages a port commonly meets:
 | `Argument of type 'i32' is not assignable to … 1000000`   | a literal first argument fixes a generic's type: name it as a typed `const`                                                      |
 | a helper's change to an array argument is lost            | arguments are copies: mutate module state, or return the new value                                                               |
 | a game that ran fine becomes slow                         | a copy in a hot path: `const e = list[i]`, `for (const e of list)` over structs with arrays, a function returning a stored array |
+| `list[math.rndi(0, n)]` copies `list`                     | an index that calls a function reads the array first, as JavaScript does: draw the index into a local, then index                |
 
 ## 4. Build, play and check
 
