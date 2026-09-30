@@ -110,7 +110,9 @@ ROM with late frames can be torn: the page flip happened mid-display.
   `setup()`, go to EWRAM), and last the
   screen, moved there after boot if it still fits. A screen in EWRAM makes
   `present` and every draw about a third slower; screens over about 20 KB
-  (200 x 150) never fit. `tests/games.test.ts` requires screens up to
+  (200 x 150) never fit, unless `"iwram": "screen"` in `retro.json` keeps
+  tagged code and the small arrays out of IWRAM (up to about 160 x 150, as
+  Megaball's 160 x 144). `tests/games.test.ts` requires screens up to
   160 x 120 to stay in IWRAM: run it after any SDK change, since a few
   hundred bytes of new code or fields can push Pyxel Jump's screen out.
 - Pixel spans go through MicroTS array builtins, which compile to loops

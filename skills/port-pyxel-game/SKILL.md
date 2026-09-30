@@ -72,6 +72,11 @@ games/<name>/
 `title` is the cartridge title (12 characters are stored), `code` four
 uppercase characters; the other fields are optional. `images` replaces
 `pyxel.images[bank].load(x, y, file)` calls, which the port then drops.
+`"iwram": "screen"` gives IWRAM to a screen larger than 160 x 120 (up to
+about 160 x 150): the SDK's `@iwram` loops then run from ROM, which makes
+each blit about a third slower, but `present` and every pixel written cost
+about half. It suits games that redraw little of the screen a frame, such
+as Megaball, which draws only what changed.
 
 `game.ts` starts with a comment naming the original file, its author and its
 license (Pyxel's examples are MIT), and exports three functions:

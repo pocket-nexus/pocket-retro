@@ -15,6 +15,13 @@ export interface Manifest {
   palette?: string;
   /** Images drawn into banks at build time, as pyxel.images[bank].load(x, y, file). */
   images?: { bank: number; x: number; y: number; file: string }[];
+  /**
+   * What IWRAM holds besides the host: "code" (default), the SDK's hot loops
+   * and the model's first small arrays; or "screen", which keeps both out so
+   * a screen up to about 160 x 150 fits there. The loops then run from ROM,
+   * about half as fast: for games that draw little of their screen a frame.
+   */
+  iwram: "code" | "screen";
 }
 
 export function readManifest(directory: string): Manifest {
@@ -33,6 +40,7 @@ export function readManifest(directory: string): Manifest {
             .slice(0, 3),
     ),
     entry: String(raw.entry ?? "game.ts"),
+    iwram: raw.iwram === "screen" ? "screen" : "code",
     ...(raw.resources ? { resources: String(raw.resources) } : {}),
     ...(raw.palette ? { palette: String(raw.palette) } : {}),
     ...(Array.isArray(raw.images)

@@ -45,7 +45,7 @@ export function frame(keys: i32, ticks: i32): void { beginFrame(keys, ticks); up
 `;
 }
 
-function gameCrate(model: string): { cargo: string; main: string } {
+function gameCrate(model: string, manifest: Manifest): { cargo: string; main: string } {
   const cargo = `[package]
 name = "retro-game"
 version = "0.1.0"
@@ -123,6 +123,8 @@ extern "C" fn retro_game_main() -> ! {
         .map(|pixels| pixels + 64 + model_bytes)
         .find(|&room| size >= room)
         .map_or(1536, |room| (size - room).min(1536));
+    // "iwram": "screen" in retro.json keeps the arrays out of IWRAM altogether.
+    let budget = if ${manifest.iwram === "screen"} { 0 } else { budget };
     let model = pocket_retro_gba::memory::in_iwram_up_to(512, budget, AppModel::default);
     let mut game = Model(pocket_retro_gba::memory::in_iwram(|| alloc::boxed::Box::new(model)));
     pocket_retro_gba::log!("model {} bytes", model_bytes);
@@ -161,10 +163,13 @@ export async function buildGame(gameDirectory: string, options: BuildOptions = {
       `${diagnostic.file}:${diagnostic.line}:${diagnostic.column}: ${diagnostic.severity}: ${diagnostic.message}`,
     );
   const model = resolve(build, "gen/app_model.rs");
-  // Hot functions of the SDK and of the game itself go to IWRAM.
+  // Hot functions of the SDK and of the game itself go to IWRAM, unless the
+  // game keeps IWRAM for its screen ("iwram": "screen" in retro.json).
   const hot = placeInIwram(
     generateModelRust(program),
-    new Set([...iwramFunctions(SDK), ...iwramFunctions(gameDirectory)]),
+    manifest.iwram === "screen"
+      ? new Set<string>()
+      : new Set([...iwramFunctions(SDK), ...iwramFunctions(gameDirectory)]),
   );
   const rust = options.noInline
     ? hot.rust.replace(/^(\s*)fn ((?:render_)?fn_\d+|pure_\d+)\(/gm, "$1#[inline(never)]\n$1fn $2(")
@@ -179,7 +184,7 @@ export async function buildGame(gameDirectory: string, options: BuildOptions = {
   writeFileSync(model, flat);
   writeFileSync(resolve(build, "gen/functions.json"), JSON.stringify(Object.fromEntries(names), null, 1));
 
-  const crate = gameCrate(model);
+  const crate = gameCrate(model, manifest);
   const manifestPath = resolve(build, "crate/Cargo.toml");
   if (!existsSync(manifestPath) || readFileSync(manifestPath, "utf8") !== crate.cargo)
     writeFileSync(manifestPath, crate.cargo);
