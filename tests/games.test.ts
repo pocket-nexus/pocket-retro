@@ -32,6 +32,8 @@ const SCRIPTS: Record<string, string> = {
     "6:A+LEFT 6:LEFT 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN " +
     "6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+RIGHT 6:RIGHT 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN " +
     "30:A+DOWN 240:-",
+  // Fires, weaves and shoots down an enemy; the first to be hit resumes the music.
+  mega_wing: "60:- 5:START 60:- 90:A 60:LEFT+A 60:RIGHT+A 90:UP+A",
 };
 
 const games = readdirSync(resolve(ROOT, "games"), { withFileTypes: true })
