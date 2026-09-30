@@ -143,7 +143,10 @@ function mapped(s: I32, col: I32): I32 {
 
 /** Copies a bank into RAM before its first write. */
 function writable(s: I32): void {
-  if (s >= SCREEN) return;
+  if (s >= SCREEN) {
+    screenFill = -1;
+    return;
+  }
   cellsStale[s] = true;
   tilesVersion++;
   if (len(banks[s]) === 0) {
@@ -210,11 +213,16 @@ export function pset(s: I32, x: I32, y: I32, col: I32): void {
   put(s, x - camX[s], y - camY[s], mapped(s, col));
 }
 
+/** The one color of the whole screen right after cls(), or -1 once anything else is drawn. */
+let screenFill: I32 = -1;
+
 export function cls(s: I32, col: I32): void {
   writable(s);
   const value = u8(mapped(s, col));
-  if (s === SCREEN) fillRange(screen, 0, width * height, value);
-  else fillRange(banks[s], 0, BANK_BYTES, value);
+  if (s === SCREEN) {
+    fillRange(screen, 0, width * height, value);
+    screenFill = i32(value);
+  } else fillRange(banks[s], 0, BANK_BYTES, value);
 }
 
 /** Horizontal run from x1 to x2 inclusive on row y, clipped; value is mapped. */
@@ -799,26 +807,53 @@ function saveUnder(x: I32, y: I32, w: I32, h: I32): void {
 
 /** Puts back the pixels of the block saveUnder() kept that the screen's dither pattern closes. */
 function restoreUnder(x: I32, y: I32, w: I32, h: I32): void {
-  for (let j = 0; j < h; j++) {
-    const bits = (ditherMask[SCREEN] >> (((y + j) & 3) << 2)) & 15,
-      from = j * w,
-      to = (y + j) * width + x;
-    if (bits === 0) copyRange(screen, to, under, from, w);
-    else if (bits !== 15)
-      for (let p = 0; p < 4; p++)
-        if ((bits & (1 << ((x + p) & 3))) === 0) columnsToScreen(FROM_UNDER, from, to, p, w, -1);
-  }
+  for (let j = 0; j < h; j++)
+    if (((ditherMask[SCREEN] >> (((y + j) & 3) << 2)) & 15) === 0)
+      copyRange(screen, (y + j) * width + x, under, j * w, w);
+  ditherBlock(FROM_UNDER, 0, w, y * width + x, x, y, w, h, -1, true, 1, 3);
 }
 
-// Sources of columnsToScreen().
+// Sources of ditherBlock().
 const FROM_UNDER: I32 = 0;
 const FROM_CARTRIDGE: I32 = 1;
 const FROM_REPLAY: I32 = 2;
+const FROM_FILL: I32 = 3;
 
 /**
- * Copies columns first, first + 4, ... below w of a row at `from` to the
- * screen at `to`: from `under`, from replayPixels, or from the cartridge
- * images leaving out color `key`.
+ * Writes the columns the screen's dither pattern opens (or with `closed`,
+ * closes) in the rows of a w x h block with `fewest` to `most` of their four
+ * column phases open. The block is at screen index `to`, position (x, y);
+ * its pixels come from `under`, replayPixels or the cartridge images (less
+ * color `key`) at `from`, rows `stride` apart, or are all color `key`.
+ */
+function ditherBlock(
+  source: I32,
+  from: I32,
+  stride: I32,
+  to: I32,
+  x: I32,
+  y: I32,
+  w: I32,
+  h: I32,
+  key: I32,
+  closed: boolean,
+  fewest: I32,
+  most: I32,
+): void {
+  for (let j = 0; j < h; j++) {
+    const bits = (ditherMask[SCREEN] >> (((y + j) & 3) << 2)) & 15,
+      open = (bits & 1) + ((bits >> 1) & 1) + ((bits >> 2) & 1) + ((bits >> 3) & 1);
+    if (open < fewest || open > most) continue;
+    const columns = closed ? 15 & ~bits : bits;
+    for (let p = 0; p < 4; p++)
+      if ((columns & (1 << ((x + p) & 3))) !== 0) columnsToScreen(source, from + j * stride, to + j * width, p, w, key);
+  }
+}
+
+/**
+ * Writes columns first, first + 4, ... below w of a row at `from` to the
+ * screen at `to`: from `under`, from replayPixels, from the cartridge images
+ * leaving out color `key`, or color `key` itself.
  */
 /** @iwram */
 function columnsToScreen(source: I32, from: I32, to: I32, first: I32, w: I32, key: I32): void {
@@ -829,6 +864,9 @@ function columnsToScreen(source: I32, from: I32, to: I32, first: I32, w: I32, ke
     }
   } else if (source === FROM_REPLAY) {
     for (let i = first; i < w; i += 4) screen[to + i] = replayPixels[from + i];
+  } else if (source === FROM_FILL) {
+    const color = u8(key);
+    for (let i = first; i < w; i += 4) screen[to + i] = color;
   } else {
     for (let i = first; i < w; i += 4) screen[to + i] = under[from + i];
   }
@@ -837,26 +875,34 @@ function columnsToScreen(source: I32, from: I32, to: I32, first: I32, w: I32, ke
 /**
  * Draws the w x h replayPixels at (x, y) of the screen through its dither
  * pattern. Rows with at most two of their four column phases open copy those
- * columns; rows with three copy whole and put the closed columns back.
+ * columns; rows with three copy whole and put the closed columns back. On a
+ * screen cls() left all of color `cleared`, rows with two open phases or
+ * more copy whole and fill the closed columns with it instead.
  */
-function replayDithered(x: I32, y: I32, w: I32, h: I32): void {
-  if (len(under) < w) under = fill(w, u8(0));
+function replayDithered(x: I32, y: I32, w: I32, h: I32, cleared: I32): void {
+  if (cleared >= 0) {
+    for (let j = 0; j < h; j++) {
+      const bits = (ditherMask[SCREEN] >> (((y + j) & 3) << 2)) & 15,
+        open = (bits & 1) + ((bits >> 1) & 1) + ((bits >> 2) & 1) + ((bits >> 3) & 1);
+      if (open >= 2) copyRange(screen, (y + j) * width + x, replayPixels, j * w, w);
+    }
+    ditherBlock(FROM_REPLAY, 0, w, y * width + x, x, y, w, h, -1, false, 1, 1);
+    ditherBlock(FROM_FILL, 0, 0, y * width + x, x, y, w, h, cleared, true, 2, 3);
+    return;
+  }
+  if (len(under) < w * h) under = fill(w * h, u8(0));
   for (let j = 0; j < h; j++) {
     const bits = (ditherMask[SCREEN] >> (((y + j) & 3) << 2)) & 15,
-      open = (bits & 1) + ((bits >> 1) & 1) + ((bits >> 2) & 1) + ((bits >> 3) & 1),
-      from = j * w,
       to = (y + j) * width + x;
-    if (open === 4) {
-      copyRange(screen, to, replayPixels, from, w);
-    } else if (open === 3) {
-      copyRange(under, 0, screen, to, w);
-      copyRange(screen, to, replayPixels, from, w);
-      for (let p = 0; p < 4; p++) if ((bits & (1 << ((x + p) & 3))) === 0) columnsToScreen(FROM_UNDER, 0, to, p, w, -1);
-    } else if (open > 0) {
-      for (let p = 0; p < 4; p++)
-        if ((bits & (1 << ((x + p) & 3))) !== 0) columnsToScreen(FROM_REPLAY, from, to, p, w, -1);
+    if (bits === 15) {
+      copyRange(screen, to, replayPixels, j * w, w);
+    } else if (bits === 7 || bits === 11 || bits === 13 || bits === 14) {
+      copyRange(under, j * w, screen, to, w);
+      copyRange(screen, to, replayPixels, j * w, w);
     }
   }
+  ditherBlock(FROM_REPLAY, 0, w, y * width + x, x, y, w, h, -1, false, 1, 2);
+  ditherBlock(FROM_UNDER, 0, w, y * width + x, x, y, w, h, -1, true, 3, 3);
 }
 
 /** A color key the block copies can skip: colors are bytes, so larger keys match nothing. */
@@ -974,12 +1020,7 @@ function ditheredBlock(img: I32, u: I32, v: I32, x: I32, y: I32, w: I32, h: I32,
  * pattern leaves them open and they are not of color `key`.
  */
 function ditherFromCartridge(from: I32, to: I32, x: I32, y: I32, w: I32, h: I32, key: I32): void {
-  for (let j = 0; j < h; j++) {
-    const bits = (ditherMask[SCREEN] >> (((y + j) & 3) << 2)) & 15;
-    for (let p = 0; p < 4; p++)
-      if ((bits & (1 << ((x + p) & 3))) !== 0)
-        columnsToScreen(FROM_CARTRIDGE, from + j * IMAGE_SIZE, to + j * width, p, w, key);
-  }
+  ditherBlock(FROM_CARTRIDGE, from, IMAGE_SIZE, to, x, y, w, h, key, false, 1, 4);
 }
 
 /** A blit whose source is its destination reads a copy of the source region first. */
@@ -1367,7 +1408,7 @@ function keepWindow(): void {
  * pixels to the next, as a draw that starts a scene often comes with other
  * work.
  */
-function replayTiles(m: I32, img: I32): boolean {
+function replayTiles(m: I32, img: I32, cleared: I32): boolean {
   if (len(replayKey) === 0) replayKey = fill(11, 0);
   const hidden = ditherMask[SCREEN] === 0,
     dithered = ditherMask[SCREEN] !== ALL_PIXELS,
@@ -1405,7 +1446,7 @@ function replayTiles(m: I32, img: I32): boolean {
   }
   const changed = replayKey[7] < replayKey[9];
   if (dx === 0 && dy === 0 && !changed) {
-    if (dithered) replayDithered(copyDstX, copyDstY, copyW, copyH);
+    if (dithered) replayDithered(copyDstX, copyDstY, copyW, copyH, cleared);
     else copyRect(screen, copyDstY * width + copyDstX, width, replayPixels, 0, copyW, copyW, copyH);
     return true;
   }
@@ -1473,12 +1514,13 @@ export function tilemapImage(m: I32): I32 {
  * s, as canvas.rs draw_tilemap does: each tile names an 8 x 8 image cell.
  */
 export function bltm(s: I32, x: I32, y: I32, m: I32, u: I32, v: I32, w: I32, h: I32, key: I32): void {
+  const cleared = screenFill;
   writable(s);
   copyArea(s, x - camX[s], y - camY[s], u, v, TILEMAP_SIZE * 8 - 1, TILEMAP_SIZE * 8 - 1, w, h);
   if (copyW === 0 || copyH === 0) return;
   const img = tilemapSources[m];
   if (s === SCREEN && img < SCREEN && copySignX > 0 && copySignY > 0) {
-    if (blockKey(key) < 0 && palIdentity[s] && replayTiles(m, img)) return;
+    if (blockKey(key) < 0 && palIdentity[s] && replayTiles(m, img, cleared)) return;
     if (ditherMask[s] === 0) return;
     const dithered = ditherMask[s] !== ALL_PIXELS;
     if (dithered) saveUnder(copyDstX, copyDstY, copyW, copyH);
@@ -1695,6 +1737,16 @@ const FONT: I32[] = [
 
 /** Draws the part of one glyph inside the clip rectangle, through dither if it is set. */
 function glyphClipped(s: I32, x: I32, y: I32, bits: I32, value: I32): void {
+  if (s === SCREEN && x >= clipX1[s] && x + 3 <= clipX2[s] && y >= clipY1[s] && y + 5 <= clipY2[s]) {
+    // A glyph inside the clip rectangle drawn through dither: its pixels the pattern closes are masked off.
+    let open = 0;
+    for (let fy = 0; fy < 6; fy++) {
+      const columns = (ditherMask[s] >> (((y + fy) & 3) << 2)) & 15;
+      for (let fx = 0; fx < 4; fx++) if ((columns & (1 << ((x + fx) & 3))) !== 0) open |= 1 << (23 - fy * 4 - fx);
+    }
+    glyphToScreen(y * width + x, bits & open, u8(value));
+    return;
+  }
   if (s !== SCREEN || ditherMask[s] !== ALL_PIXELS) {
     for (let fy = 0; fy < 6; fy++)
       for (let fx = 0; fx < 4; fx++) if (((bits >> (23 - fy * 4 - fx)) & 1) !== 0) put(s, x + fx, y + fy, value);
