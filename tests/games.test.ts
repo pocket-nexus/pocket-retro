@@ -26,6 +26,12 @@ const SCRIPTS: Record<string, string> = {
   draw_api: "60:- 30:RIGHT 30:DOWN 60:A 180:- 120:A 60:LEFT+UP",
   // Rescues two astronauts, flies into a meteor, then starts again.
   space_rescue: "60:- 4:START 2:- 38:A 300:- 74:A 120:- 4:START 60:- 30:A 30:-",
+  // 10 fps, a step a frame: attack, then step, down through the Courtyard to the Outer Gate.
+  daylight:
+    "60:- 5:START 25:- 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN " +
+    "6:A+LEFT 6:LEFT 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN " +
+    "6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN 6:A+RIGHT 6:RIGHT 6:A+DOWN 6:DOWN 6:A+DOWN 6:DOWN " +
+    "30:A+DOWN 240:-",
 };
 
 const games = readdirSync(resolve(ROOT, "games"), { withFileTypes: true })
